@@ -663,7 +663,7 @@ class Store:
             if not isinstance(v, dict):
                 continue
             w = {k: v[k] for k in ("filters", "sorts", "hidden", "widths", "group_by", "date_prop", "card_cover",
-                                   "card_size", "wrap", "order", "filter_mode", "collapsed", "show_empty")
+                                   "card_size", "wrap", "order", "filter_mode", "collapsed", "show_empty", "embed_only")
                  if k in v}
             w.update(id=str(v.get("id") or new_id(8))[:32], name=str(v.get("name") or "View")[:200],
                      type=v.get("type") if v.get("type") in VIEW_TYPES else "table")

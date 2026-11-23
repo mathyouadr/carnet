@@ -7,7 +7,7 @@ import { api, BASE, Page, Row, Schema, View } from "../api";
 import { useApp } from "../app/store";
 import { t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
-import { applyView, newId } from "./model";
+import { applyView, newId, propsFromFilters } from "./model";
 import { BoardView, CalendarView, GalleryView, ListView, TableView } from "./Views";
 import { FilterEditor, filterLabel, RenameInline, SortEditor, VisibilityEditor } from "./Menus";
 
@@ -38,7 +38,9 @@ export function useChanged(id: string | null | undefined, cb: () => void) {
   }, [id]);
 }
 
-export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string; inline?: boolean; readOnly?: boolean; initial?: Page }) {
+/** ``lockView``: a linked view (inline database block pointing at one view, Notion's "linked view of a database"):
+ *  only that view is shown, its name is the title. Views marked ``embed_only`` stay out of the database's own tabs. */
+export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { dbId: string; inline?: boolean; readOnly?: boolean; initial?: Page; lockView?: string }) {
   const app = useApp();
   const [db, setDb] = useState<Page | null>(initial && initial.id === dbId ? initial : null);
   const [err, setErr] = useState("");
@@ -59,7 +61,9 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
   if (!db || !db.schema || !db.views) return <div className="cn-db-loading">{t("Loading…")}</div>;
   const schema = db.schema;
   const views = db.views;
-  const view = views.find((v) => v.id === viewId) || views[0];
+  const locked = lockView ? views.find((v) => v.id === lockView) : undefined;
+  const tabs = locked ? [locked] : views.filter((v) => !v.embed_only);
+  const view = locked || tabs.find((v) => v.id === viewId) || tabs[0] || views[0];
   const rows = (db.rows || []).filter((r) => !r.is_template);
   const templates = (db.rows || []).filter((r) => r.is_template);
   const shown = applyView(rows, view, schema, search, app.titleOf);
@@ -91,8 +95,8 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
     try {
       const r = template
         ? await api.post(`/api/templates/${template}/use`, { parent_id: dbId })
-        : await api.post(`/api/databases/${dbId}/rows`, { title: "", props });
-      if (template && Object.keys(props).length) await api.post(`/api/pages/${r.id}`, { props });
+        : await api.post(`/api/databases/${dbId}/rows`, { title: "", props: { ...propsFromFilters(view, schema), ...props } });
+      if (template) await api.post(`/api/pages/${r.id}`, { props: { ...propsFromFilters(view, schema), ...props } });
       await load();
       app.refresh();
       if (open) app.setPeek(r.id);
@@ -116,7 +120,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
       {inline && (
         <div className="cn-db-title">
           <span className="ic">{db.icon || "🗂️"}</span>
-          {readOnly ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : (
+          {locked ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : readOnly ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : (
             <input className="cn-db-title-in" defaultValue={db.title} placeholder={t("Untitled")} key={db.id}
               onBlur={(e) => { if (e.target.value !== db.title) persist({ title: e.target.value }); }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
@@ -126,13 +130,13 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
       )}
       <div className="cn-db-bar">
         <div className="cn-views">
-          {views.map((v) => (
+          {tabs.map((v) => (
             <button type="button" key={v.id} className={`cn-view-tab ${v.id === view.id ? "on" : ""}`}
               onClick={(e) => (v.id === view.id && !readOnly ? openPop("view")(e) : pick(v.id))}>
               {viewIcon(v.type)}<span>{v.name}</span>{v.id === view.id && !readOnly && <ChevronDown size={12} />}
             </button>
           ))}
-          {!readOnly && <button type="button" className="cn-icon-btn" title={t("Add a view")} onClick={openPop("addview")}><Plus size={15} /></button>}
+          {!readOnly && !locked && <button type="button" className="cn-icon-btn" title={t("Add a view")} onClick={openPop("addview")}><Plus size={15} /></button>}
         </div>
         <div className="cn-db-tools">
           <button type="button" className={`cn-icon-btn ${(view.filters || []).length ? "active" : ""}`} title={t("Filter")} onClick={openPop("filter")}><ListFilter size={16} /></button>
@@ -153,7 +157,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
           )}
         </div>
       </div>
-      {(view.filters || []).length > 0 && (
+      {(view.filters || []).length > 0 && !locked && (
         <div className="cn-filter-chips">
           {(view.filters || []).map((f, i) => (
             <button type="button" key={i} className="cn-fchip" onClick={openPop("filter1", i)}>{filterLabel(f, schema)} <ChevronDown size={12} /></button>
@@ -223,7 +227,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial }: { dbId: string
           <MenuSep />
           <MenuItem icon={<Copy size={15} />} onClick={() => { const v = { ...view, id: newId(8), name: view.name + " 2" }; persist({ views: [...views, v] }); pick(v.id); close(); }}>{t("Duplicate view")}</MenuItem>
           <MenuItem icon={<Download size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${dbId}/export.csv`; close(); }}>{t("Export as CSV")}</MenuItem>
-          {views.length > 1 && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { persist({ views: views.filter((v) => v.id !== view.id) }); close(); }}>{t("Delete view")}</MenuItem>}
+          {views.length > 1 && !locked && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { persist({ views: views.filter((v) => v.id !== view.id) }); close(); }}>{t("Delete view")}</MenuItem>}
         </Popover>
       )}
       {pop?.k === "filter" && (

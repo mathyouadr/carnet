@@ -149,13 +149,13 @@ export const PageLinkBlock = createReactBlockSpec(
 
 // ------------------------------------------------------------------ inline database
 export const DatabaseBlock = createReactBlockSpec(
-  { type: "database", propSchema: { pageId: { default: "" } }, content: "none" },
+  { type: "database", propSchema: { pageId: { default: "" }, viewId: { default: "" } }, content: "none" },
   {
     render: ({ block, editor }) => (
       <div className="cn-dbblock" contentEditable={false}
         onKeyDown={(e) => e.stopPropagation()} onPaste={(e) => e.stopPropagation()} onCopy={(e) => e.stopPropagation()}
         onCut={(e) => e.stopPropagation()} onDrop={(e) => { if (!(e.dataTransfer.types || []).includes("blocknote/html")) e.stopPropagation(); }}>
-        <DatabaseView dbId={block.props.pageId as string} inline readOnly={!editor.isEditable} />
+        <DatabaseView dbId={block.props.pageId as string} lockView={(block.props.viewId as string) || undefined} inline readOnly={!editor.isEditable} />
       </div>
     ),
   },

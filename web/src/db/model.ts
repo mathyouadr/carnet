@@ -197,3 +197,23 @@ export function fmtNumber(v: any, format?: string) {
   if (format === "dollar") return n.toLocaleString(loc, { style: "currency", currency: "USD" });
   return n.toLocaleString(loc, { maximumFractionDigits: 6 });
 }
+
+/** Values a new row gets from the view's filters ("AND" only), so it shows up where it was created. */
+export function propsFromFilters(view: View, schema: Schema): Record<string, any> {
+  const out: Record<string, any> = {};
+  if (view.filter_mode === "or") return out;
+  for (const f of view.filters || []) {
+    const p = schema.properties.find((x) => x.id === f.prop);
+    if (!p || f.value === undefined || f.value === null || f.value === "") continue;
+    if ((p.type === "select" || p.type === "status") && f.op === "is") out[p.id] = f.value;
+    else if ((p.type === "multi_select" || p.type === "relation") && f.op === "contains") out[p.id] = [...(out[p.id] || []), f.value];
+    else if (p.type === "checkbox") out[p.id] = f.op === "checked";
+    else if (p.type === "number" && f.op === "eq") out[p.id] = Number(f.value);
+    else if (["text", "url", "email", "phone"].includes(p.type) && (f.op === "is" || f.op === "eq")) out[p.id] = f.value;
+  }
+  for (const f of view.filters || []) {
+    const p = schema.properties.find((x) => x.id === f.prop);
+    if (p?.type === "checkbox" && !(p.id in out)) out[p.id] = f.op === "checked";
+  }
+  return out;
+}

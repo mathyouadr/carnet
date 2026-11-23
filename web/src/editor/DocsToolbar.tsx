@@ -35,7 +35,9 @@ const KINDS: Kind[] = [
 function kindOf(block: any): Kind {
   if (!block) return KINDS[0];
   if (block.type === "heading") return KINDS.find((k) => k.props?.level === block.props.level) || KINDS[1];
-  return KINDS.find((k) => k.type === block.type) || { key: block.type, label: block.type, type: block.type, icon: null };
+  const OTHER: Record<string, string> = { database: "Database", pageLink: "Page", image: "Image", file: "File", video: "Video",
+    audio: "Audio", table: "Table", math: "Equation", embed: "Embed", divider: "Divider", column: "Columns", columnList: "Columns" };
+  return KINDS.find((k) => k.type === block.type) || { key: block.type, label: OTHER[block.type] || "Block", type: block.type, icon: null };
 }
 
 /** Keyboard height on phones (the visual viewport shrinks when the keyboard opens). */

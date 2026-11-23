@@ -99,6 +99,8 @@ export type View = {
   filters?: Filter[]; filter_mode?: "and" | "or"; sorts?: Sort[]; hidden?: string[]; widths?: Record<string, number>;
   group_by?: string; date_prop?: string; card_cover?: "cover" | "content" | "none"; card_size?: "small" | "medium" | "large";
   wrap?: boolean; order?: string[]; collapsed?: string[];
+  /** shown only through a linked view block, not in the database's own tabs */
+  embed_only?: boolean;
 };
 export type Row = Summary & { props: Record<string, any>; cover: string; has_content: boolean; preview: string };
 
