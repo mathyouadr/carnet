@@ -12,3 +12,4 @@ data/
 web/node_modules/
 # the web app is built by `cd web && npm ci && npm run build` (or by the Dockerfile)
 carnet/static/
+.superpowers/
