@@ -57,7 +57,10 @@ class App:
 
     def info(self):
         return {"version": __version__, "title": self.c.title, "base": self.c.base_path, "protected": self.protected,
-                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb}
+                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb, "ai": self.ai_info()}
+
+    def ai_info(self):
+        return {"enabled": self.c.ai_enabled, "name": self.c.ai_name}
 
     # -- sessions: "expiry.signature"
     def make_session(self) -> str:
@@ -375,7 +378,8 @@ class Handler(BaseHTTPRequestHandler):
                              "npm run build</code>.</p>", ctype="text/html; charset=utf-8")
         raw = idx.read_text(encoding="utf-8")
         boot = {"base": c.base_path, "protected": self.app.protected, "loggedIn": logged_in, "version": __version__,
-                "title": c.title, "lang": c.lang, "theme": c.theme, "maxUploadMb": c.max_upload_mb}
+                "title": c.title, "lang": c.lang, "theme": c.theme, "maxUploadMb": c.max_upload_mb,
+                "ai": self.app.ai_info()}
         raw = (raw.replace("<!--BASE-->", f'<base href="{html.escape(c.base_path)}/">')
                   .replace("{{TITLE}}", html.escape(c.title))
                   .replace("{{BOOT}}", json.dumps(boot).replace("<", "\\u003c"))

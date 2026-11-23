@@ -45,6 +45,16 @@ class Config:
     allowed_hosts: tuple = ()           # extra host names accepted without a password (anti DNS rebinding)
     max_upload_mb: int = 50
     md_folders: str = ""                # "Name=/path;Other=/path": Markdown folders shown read-only
+    ai_url: str = ""                    # OpenAI-compatible base URL (".../v1"); empty = no AI
+    ai_key: str = ""                    # bearer for ai_url (never sent to the browser)
+    ai_model: str = "hermes-agent"
+    ai_name: str = "AI"                 # name shown in the UI
+    ai_system: str = ""                 # extra system prompt
+    ai_timeout: int = 120
+
+    @property
+    def ai_enabled(self) -> bool:
+        return bool(self.ai_url)
 
     @property
     def db_path(self) -> Path:
@@ -78,4 +88,7 @@ class Config:
             allowed_hosts=tuple(h.strip().lower() for h in e("CARNET_ALLOWED_HOSTS", "").split(",") if h.strip()),
             max_upload_mb=int(e("CARNET_MAX_UPLOAD_MB", "50") or 50),
             md_folders=e("CARNET_MD_FOLDERS", ""),
+            ai_url=e("CARNET_AI_URL", "").strip().rstrip("/"), ai_key=e("CARNET_AI_KEY", "").strip(),
+            ai_model=e("CARNET_AI_MODEL", "") or "hermes-agent", ai_name=e("CARNET_AI_NAME", "") or "AI",
+            ai_system=read("AI_SYSTEM"), ai_timeout=int(e("CARNET_AI_TIMEOUT", "120") or 120),
         )
