@@ -337,6 +337,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             raw = self.read_raw(MAX_AI_BODY)
         except ValueError as e:
+            if "large" in str(e):
+                self._drain(8 * MAX_AI_BODY)        # else the client gets a broken pipe instead of the 413
             self.json(413 if "large" in str(e) else 400, {"error": f"request refused ({e})"})
             return None
         try:
@@ -347,6 +349,21 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError) as e:
             self.json(400, {"error": f"invalid body ({e})"})
             return None
+
+    def _drain(self, limit: int):
+        """Read and drop a refused request body (up to `limit` bytes) so the client can read our answer."""
+        try:
+            left = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if left > limit:
+            return
+        while left > 0:
+            chunk = self.rfile.read(min(65536, left))
+            if not chunk:
+                break
+            left -= len(chunk)
+        self._body_read = True
 
     def _related(self, query: str, exclude: str) -> list[dict]:
         """Up to ai.MAX_HITS notes sharing the most words with `query` (one search per significant word)."""

@@ -293,6 +293,12 @@ class AIHTTPTests(ServerCase):
         self.assertIn("utilise des areas", last)
         self.assertNotIn("Vieux ospfv2", last)
 
+    def test_oversized_body_gets_413_not_a_broken_pipe(self):
+        big = {"page_id": self.page_id(), "command": "fix", "selection": [],
+               "context": [{"type": "paragraph", "content": [{"type": "text", "text": "x" * 4_000_000}]}]}
+        for _ in range(3):
+            self.assertEqual(self.raw("POST", "/api/ai", big)[0], 413)
+
     def test_chunked_cut_mid_stream(self):
         self.up.chunked_cut = True
         st, _, blob = self.ask()
