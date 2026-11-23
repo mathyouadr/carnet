@@ -99,9 +99,11 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           }}
           onDrop={onDrop}
           onClick={() => app.navigate(p.id)}>
-          <button type="button" className={`cn-node-tog ${open ? "open" : ""}`} onClick={(e) => { e.stopPropagation(); exp.toggle(p.id); }}>
-            <ChevronRight size={14} />
-          </button>
+          {kids.length ? (
+            <button type="button" className={`cn-node-tog ${open ? "open" : ""}`} onClick={(e) => { e.stopPropagation(); exp.toggle(p.id); }}>
+              <ChevronRight size={14} />
+            </button>
+          ) : <span className="cn-node-tog ph" />}
           <span className="cn-node-ic">{p.icon || (p.kind === "database" ? <Table2 size={15} /> : <FileText size={15} />)}</span>
           <a className="cn-node-tx" href={pagePath(p.id)} onClick={(e) => e.preventDefault()} draggable={false}>{p.title || t("Untitled")}</a>
           <span className="cn-node-act">
@@ -109,10 +111,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
             {!p.readonly && <button type="button" title={t("Add a sub-page")} onClick={(e) => { e.stopPropagation(); addChild(p); }}><Plus size={15} /></button>}
           </span>
         </div>
-        {open && (
-          shown.length ? shown.map((c) => renderNode(c, depth + 1))
-            : <div className="cn-node-empty" style={{ paddingLeft: 26 + depth * 14 }}>{t("No pages inside")}</div>
-        )}
+        {open && shown.map((c) => renderNode(c, depth + 1))}
         {open && isRowParent && kids.length > 50 && <div className="cn-node-empty" style={{ paddingLeft: 26 + depth * 14 }}>+{kids.length - 50}…</div>}
       </Fragment>
     );
