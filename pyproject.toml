@@ -33,4 +33,4 @@ packages = ["carnet"]
 version = { attr = "carnet.__version__" }
 
 [tool.setuptools.package-data]
-carnet = ["static/*", "static/assets/*", "static/share/katex/*", "static/share/katex/fonts/*", "share_static/*"]
+carnet = ["static/*", "static/assets/*"]

@@ -45,9 +45,6 @@ class Config:
     allowed_hosts: tuple = ()           # extra host names accepted without a password (anti DNS rebinding)
     max_upload_mb: int = 50
     md_folders: str = ""                # "Name=/path;Other=/path": Markdown folders shown read-only
-    share_port: int = 0                 # > 0: a second listener that serves only the public links (/s/...)
-    share_host: str = "127.0.0.1"
-    share_url: str = ""                 # public address of that listener (e.g. https://share.example.org)
 
     @property
     def db_path(self) -> Path:
@@ -81,6 +78,4 @@ class Config:
             allowed_hosts=tuple(h.strip().lower() for h in e("CARNET_ALLOWED_HOSTS", "").split(",") if h.strip()),
             max_upload_mb=int(e("CARNET_MAX_UPLOAD_MB", "50") or 50),
             md_folders=e("CARNET_MD_FOLDERS", ""),
-            share_port=int(e("CARNET_SHARE_PORT", "0") or 0), share_host=e("CARNET_SHARE_HOST", "127.0.0.1"),
-            share_url=e("CARNET_SHARE_URL", "").strip().rstrip("/"),
         )

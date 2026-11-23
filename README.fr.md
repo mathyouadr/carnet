@@ -40,10 +40,6 @@ Pour garder des fichiers `.md` là où ils sont : `CARNET_MD_FOLDERS=Coffre=/che
 
 Pour partir : **Paramètres → Tout exporter** donne un zip de fichiers Markdown (sous-pages en dossiers, pièces jointes dans `_files/`).
 
-## Partager une page sur le web
-
-**⋯ → Partager sur le web** donne un lien secret (`/s/<jeton>`) qui montre la page et ses sous-pages **en lecture seule** à qui l'a, sans connexion. Couper le lien le désactive tout de suite. Avec `CARNET_SHARE_PORT=8045` (et `CARNET_SHARE_URL`), ce port ne répond **qu'aux** pages partagées : un tunnel Cloudflare ou un reverse proxy peut le publier sans exposer le reste de vos notes.
-
 ## API
 
 Les pages acceptent et renvoient du **Markdown** : voir [docs/api.md](docs/api.md).

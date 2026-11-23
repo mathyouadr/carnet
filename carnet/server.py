@@ -17,7 +17,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, share, transfer
+from . import __version__, transfer
 from .api import API, dumps
 from .config import Config
 from .mdfolders import MdFolders, parse_spec
@@ -25,7 +25,6 @@ from .store import NotFound, Store
 
 log = logging.getLogger("carnet")
 STATIC = Path(__file__).parent / "static"
-SHARE_STATIC = Path(__file__).parent / "share_static"        # share.css / share.js (KaTeX comes with the web build)
 MAX_JSON = 32 * 1024 * 1024
 SESSION_DAYS = 90
 SAFE_INLINE = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "application/pdf",
@@ -45,16 +44,11 @@ class App:
         self.lock = threading.Lock()
         self.assets = self._asset_version()
 
-    def renderer(self, prefix) -> share.Renderer:
-        return share.Renderer(self.store, prefix=prefix, lang=self.c.lang, site_title=self.c.title, assets=self.assets)
-
     def _asset_version(self):
         h = hashlib.sha1(__version__.encode())
         idx = STATIC / "index.html"
         if idx.is_file():
             h.update(idx.read_bytes())
-        for f in sorted(SHARE_STATIC.glob("*")):
-            h.update(f.read_bytes())
         return h.hexdigest()[:10]
 
     @property
@@ -63,8 +57,7 @@ class App:
 
     def info(self):
         return {"version": __version__, "title": self.c.title, "base": self.c.base_path, "protected": self.protected,
-                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb,
-                "share_url": self.c.share_url}
+                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb}
 
     # -- sessions: "expiry.signature"
     def make_session(self) -> str:
@@ -141,11 +134,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
         if gz:
             self.send_header("Content-Encoding", "gzip")
             self.send_header("Vary", "Accept-Encoding")
-        hdrs = {"Referrer-Policy": "same-origin", "X-Frame-Options": "SAMEORIGIN",
-                "Content-Security-Policy": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
+        hdrs = {"Content-Security-Policy": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'",
                 **(headers or {})}
         for k, v in hdrs.items():
             self.send_header(k, v)
@@ -262,8 +256,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(421, {"error": "unknown host name: add it to CARNET_ALLOWED_HOSTS (or set CARNET_PASSWORD)"})
         if path.startswith("/assets/") or path in ("/favicon.svg", "/icon.svg", "/manifest.webmanifest"):
             return self.static(path)
-        if path.startswith("/s/"):
-            return self.share_route(method, path, base)
         if path == "/api/login" and method == "POST":
             return self.login()
         if path == "/api/logout" and method == "POST":
@@ -325,49 +317,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(405, {"error": "method not allowed"})
         return self.page(logged_in=bool(who))
 
-    # ------------------------------------------------------------------ public links
-    def share_route(self, method, path, prefix):
-        """/s/<token>[/<page id>], /s/<token>/files/<id>/<name>, /s/_/<asset>: no login, read only."""
-        if method != "GET":
-            return self.json(405, {"error": "method not allowed"})
-        parts = path.split("/")[2:]                       # ["<token>", ...]
-        if parts and parts[0] == "_":
-            return self.share_asset("/".join(parts[1:]))
-        r = self.app.renderer(prefix)
-        tok = parts[0] if parts else ""
-        if len(parts) >= 4 and parts[1] == "files":
-            fid = parts[2]
-            if not fid.isalnum() or not r.file_allowed(tok, fid):
-                return self.share_html(404, r.not_found())
-            return self.serve_file(f"/files/{fid}/x", public=True)
-        if len(parts) > 2 or (len(parts) == 2 and not share.valid_id(parts[1])):
-            return self.share_html(404, r.not_found())
-        status, body = r.page(tok, parts[1] if len(parts) == 2 else None)
-        return self.share_html(status, body)
-
-    SHARE_HEADERS = {"X-Robots-Tag": "noindex, nofollow, noarchive", "Referrer-Policy": "no-referrer",
-                     "X-Frame-Options": "DENY",
-                     "Content-Security-Policy": "default-src 'none'; img-src 'self' data: https:; media-src 'self' https:; "
-                                                "style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; "
-                                                "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"}
-
-    def share_html(self, status, body):
-        self.send(status, body, ctype="text/html; charset=utf-8", cache="no-cache", headers=self.SHARE_HEADERS)
-
-    def share_asset(self, name):
-        root = (STATIC / "share" if name.startswith("katex/") else SHARE_STATIC).resolve()
-        f = (root / name).resolve()
-        if not name or not str(f).startswith(str(root) + os.sep) or not f.is_file():
-            return self.send(404, "not found", ctype="text/plain; charset=utf-8", headers=self.SHARE_HEADERS)
-        ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
-        if f.suffix == ".js":
-            ctype = "text/javascript"
-        if f.suffix == ".woff2":
-            ctype = "font/woff2"
-        if ctype.startswith("text/") or ctype == "image/svg+xml":
-            ctype += "; charset=utf-8"
-        self.send(200, f.read_bytes(), ctype=ctype, cache="public, max-age=86400", headers=self.SHARE_HEADERS)
-
     # ------------------------------------------------------------------ uploads & files
     def upload(self):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "file")
@@ -398,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(400, {"error": f"import failed ({type(e).__name__})"})
         return self.json(200, stats)
 
-    def serve_file(self, path, public=False):
+    def serve_file(self, path):
         parts = path.split("/")
         fid = parts[2] if len(parts) > 2 else ""
         try:
@@ -412,12 +361,10 @@ class Handler(BaseHTTPRequestHandler):
         inline = mime in SAFE_INLINE
         disp = ("inline" if inline else "attachment") + "; filename*=UTF-8''" + urllib.parse.quote(f["name"])
         # uploaded HTML/SVG never runs as this site: served as a download inside a sandbox
-        headers = {"Content-Disposition": disp, "Content-Security-Policy": "sandbox; default-src 'none'; "
-                   "img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'"}
-        if public:                                        # a file of a shared page: never cached for long
-            headers.update({"X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer"})
         self.send(200, p.read_bytes(), ctype=mime if inline else "application/octet-stream",
-                  cache="private, max-age=300" if public else "private, max-age=31536000, immutable", headers=headers)
+                  cache="private, max-age=31536000, immutable",
+                  headers={"Content-Disposition": disp, "Content-Security-Policy": "sandbox; default-src 'none'; "
+                           "img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'"})
 
     # ------------------------------------------------------------------ pages
     def page(self, logged_in=True):
@@ -484,27 +431,6 @@ class Handler(BaseHTTPRequestHandler):
                          headers={"Set-Cookie": self.session_cookie(self.app.make_session(), SESSION_DAYS * 86400)})
 
 
-class ShareHandler(Handler):
-    """The public listener (CARNET_SHARE_PORT): answers only /s/... and robots.txt. No API, no app, no login, no
-    other file: put it behind a tunnel or a reverse proxy to publish shared pages without exposing the notes."""
-
-    def client_ip(self):
-        return self.headers.get("CF-Connecting-IP") or super().client_ip()
-
-    def _dispatch(self, method):
-        path = urllib.parse.urlsplit(self.path).path
-        if method not in ("GET",):
-            return self.send(405, "method not allowed", ctype="text/plain; charset=utf-8", headers=self.SHARE_HEADERS)
-        if path == "/robots.txt":
-            return self.send(200, "User-agent: *\nDisallow: /\n", ctype="text/plain; charset=utf-8")
-        if path == "/healthz":
-            return self.json(200, {"ok": True})
-        if path.startswith("/s/") and ".." not in path:
-            return self.share_route(method, path, "")
-        r = self.app.renderer("")
-        return self.share_html(404, r.not_found())
-
-
 def _janitor(store: Store):
     while True:
         try:
@@ -539,11 +465,6 @@ def serve(config: Config):
                     "and change your notes. Set CARNET_PASSWORD unless the network is trusted.", config.host)
     log.info("Carnet %s on http://%s:%s%s/  data=%s  auth=%s", __version__, config.host, config.port,
              config.base_path, config.data_dir, mode)
-    if config.share_port:
-        shttpd = make_share_server(app, config.share_port, config.share_host)
-        threading.Thread(target=shttpd.serve_forever, daemon=True).start()
-        log.info("Public links (read only) on http://%s:%s/s/  url=%s", config.share_host, config.share_port,
-                 config.share_url or "(CARNET_SHARE_URL not set)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -559,11 +480,3 @@ def make_server(config: Config, port: int = 0):
     httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
     httpd.daemon_threads = True
     return httpd, app
-
-
-def make_share_server(app: App, port: int = 0, host: str = "127.0.0.1"):
-    """The listener that serves only public links (/s/...), sharing the app (and its database) of the main one."""
-    handler = type("BoundShareHandler", (ShareHandler,), {"app": app})
-    httpd = ThreadingHTTPServer((host, port), handler)
-    httpd.daemon_threads = True
-    return httpd
