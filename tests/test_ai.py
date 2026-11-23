@@ -112,6 +112,16 @@ class AICoreTests(unittest.TestCase):
         self.assertNotIn("A" * 601, last)
         self.assertIn("A" * 600, last)
 
+    def test_whole_page_commands_get_the_whole_page(self):
+        page = "début " + "x" * 50000 + " FIN-DE-PAGE"
+        for cmd in ("summarize_page", "action_items"):
+            last = self.build(command=cmd, selection_md="", context_md=page)[-1]["content"]
+            self.assertIn("FIN-DE-PAGE", last)
+        huge = "y" * 100000 + "TAIL"
+        last = self.build(command="summarize_page", selection_md="", context_md=huge)[-1]["content"]
+        self.assertNotIn("TAIL", last)
+        self.assertIn("truncated", last)
+
     def test_clip_context(self):
         from carnet import ai
         sel = "<<SELECTION>>"
@@ -151,6 +161,7 @@ class FakeUpstream:
         self.script = ["Bon", "jour"]
         self.done = True
         self.hang = 0.0
+        self.chunked_cut = False          # chunked body cut mid-stream (http.client.IncompleteRead)
         self.requests = []
         self.closed = threading.Event()
         up = self
@@ -166,6 +177,18 @@ class FakeUpstream:
                     self.send_response(up.script)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
+                    return
+                if up.chunked_cut:
+                    self.protocol_version = "HTTP/1.1"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Transfer-Encoding", "chunked")
+                    self.end_headers()
+                    part = b'data: {"choices":[{"delta":{"content":"Bon"}}]}\n\n'
+                    self.wfile.write(b"%x\r\n%s\r\n" % (len(part), part))
+                    self.wfile.write(b"100\r\nshort")          # announces 256 bytes, sends 5, then closes
+                    self.wfile.flush()
+                    self.close_connection = True
                     return
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -259,6 +282,25 @@ class AIHTTPTests(ServerCase):
         self.up.stop()
         self.assertEqual(sse_events(self.ask()[2])[-1], {"error": "AI server unreachable"})
         self.up = FakeUpstream()                     # for tearDown
+
+    def test_custom_prompt_gets_related_notes(self):
+        self.raw("POST", "/api/pages", {"title": "Réseau OSPF", "markdown": "Le protocole ospfv2 utilise des areas."})
+        trashed = json.loads(self.raw("POST", "/api/pages", {"title": "Vieux ospfv2", "markdown": "ospfv2 obsolète"})[2])
+        self.raw("DELETE", f"/api/pages/{trashed['id']}")
+        self.ask(command="custom", prompt="Explique ospfv2 simplement", selection=[])
+        last = self.up.requests[-1]["body"]["messages"][-1]["content"]
+        self.assertIn("Réseau OSPF", last)
+        self.assertIn("utilise des areas", last)
+        self.assertNotIn("Vieux ospfv2", last)
+
+    def test_chunked_cut_mid_stream(self):
+        self.up.chunked_cut = True
+        st, _, blob = self.ask()
+        self.assertEqual(st, 200)
+        ev = sse_events(blob)
+        self.assertEqual(ev[1], {"delta": "Bon"})
+        self.assertEqual(ev[-1], {"error": "AI answer interrupted"})
+        self.assertNotIn(b"HTTP/1.1 500", blob)
 
     def test_guards(self):
         pid = self.page_id()

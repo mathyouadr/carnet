@@ -5,6 +5,7 @@ so the URL and the key stay on the server.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -30,6 +31,8 @@ COMMANDS: dict[str, str] = {
 REWRITE = {"improve", "fix", "shorter", "longer", "simplify", "translate_fr", "translate_en"}
 
 CONTEXT_LIMIT = 12000
+PAGE_LIMIT = 60000          # whole-page commands (summary, action items) read the page from the top
+WHOLE_PAGE = {"summarize_page", "action_items"}
 SELECTION_LIMIT = 20000
 MAX_HITS = 5
 HIT_CHARS = 600
@@ -75,7 +78,10 @@ def build_messages(*, command: str, prompt: str, title: str, selection_md: str, 
     system = SYSTEM + ("\n\n" + extra_system.strip() if extra_system and extra_system.strip() else "")
     selection_md = clip_selection(selection_md or "")
     parts = [f"Page title: {title or 'Untitled'}"]
-    if context_md:
+    if context_md and command in WHOLE_PAGE:
+        page = context_md if len(context_md) <= PAGE_LIMIT else context_md[:PAGE_LIMIT] + "\n[… page truncated …]"
+        parts.append("Page content:\n<page>\n" + page + "\n</page>")
+    elif context_md:
         parts.append("Page content (around the selection):\n<page>\n" + clip_context(context_md, selection_md) + "\n</page>")
     if hits:
         notes = [f"## {h.get('title') or 'Untitled'}\n{str(h.get('snippet') or '')[:HIT_CHARS]}" for h in hits[:MAX_HITS]]
@@ -142,7 +148,7 @@ def stream_chat(cfg, messages: list[dict], session_id: str) -> Generator[str, No
     try:
         try:
             yield from iter_deltas(resp, heartbeats=True)
-        except (OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):    # e.g. IncompleteRead: chunked body cut
             raise UpstreamError("AI answer interrupted") from None
     finally:
         resp.close()
