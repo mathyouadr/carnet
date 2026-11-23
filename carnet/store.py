@@ -184,6 +184,15 @@ class Store:
             raise NotFound(pid)
         return row
 
+    def resolve_title(self, title):
+        """Page id for a ``[[Title]]`` written through the API (live pages, case-insensitive, most recent first)."""
+        t = str(title or "").strip()
+        if not t or t.startswith("@link:"):
+            return None
+        r = self.q1("SELECT id FROM pages WHERE trashed_at IS NULL AND is_template=0 AND lower(title)=lower(?) "
+                    "ORDER BY updated_at DESC LIMIT 1", (t,))
+        return r["id"] if r else None
+
     def all_rows(self):
         return self.q("SELECT " + ", ".join(SUMMARY) + ", trashed_at FROM pages ORDER BY position, created_at")
 
@@ -309,7 +318,7 @@ class Store:
             and not self.q1("SELECT 1 FROM pages WHERE id=?", (data["id"],)) else new_id()
         content = data.get("content")
         if content is None and data.get("markdown") is not None:
-            content = md.to_blocks(str(data["markdown"]))
+            content = md.to_blocks(str(data["markdown"]), resolve=self.resolve_title)
         content = self._clean_content(content or [])
         schema = data.get("schema") or {}
         views = data.get("views") or []
@@ -350,7 +359,8 @@ class Store:
                 put(col, str(data[col] or "")[:limit])
         content_changed = False
         if "content" in data or "markdown" in data:
-            content = data["content"] if "content" in data else md.to_blocks(str(data.get("markdown") or ""))
+            content = data["content"] if "content" in data else \
+                md.to_blocks(str(data.get("markdown") or ""), resolve=self.resolve_title)
             if data.get("append") and "markdown" in data:
                 content = _loads(r["content"], []) + content
             content = self._clean_content(content)

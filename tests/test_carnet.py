@@ -219,3 +219,18 @@ class HTTPTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WikiLinkApiTest(unittest.TestCase):
+    def test_markdown_links_resolve_by_title(self):
+        import tempfile
+        from pathlib import Path
+        from carnet.store import Store
+        s = Store(Path(tempfile.mkdtemp()) / "c.db")
+        a = s.create({"title": "Tailscale"})
+        b = s.create({"title": "Note", "markdown": "Voir [[tailscale]] et [[Inconnue]]."})
+        inl = b["content"][0]["content"]
+        self.assertTrue(any(n["type"] == "pageMention" and n["props"]["pageId"] == a["id"] for n in inl))
+        s.update(b["id"], {"markdown": "- et [[Tailscale|le VPN]]", "append": True})
+        self.assertIn(a["id"], json.dumps(s.page(b["id"])["content"]))
+        s.close()
