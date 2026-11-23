@@ -150,7 +150,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
         </div>
         {mdRoots.map((r) => (
           <div className="cn-side-sec" key={"md" + r.id}>
-            <div className="cn-side-label" title={t("Markdown files, read only")}>{r.title} <span className="cn-side-ro">.md</span></div>
+            <div className="cn-side-label" title={t("Markdown files, read only")}>{r.icon ? r.icon + " " : ""}{r.title} <span className="cn-side-ro">.md</span></div>
             {app.children(r.id).map((p) => renderNode(p, 0))}
           </div>
         ))}

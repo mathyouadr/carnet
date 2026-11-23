@@ -4,6 +4,10 @@ The files stay the source of truth: Carnet only reads them (an Obsidian vault, n
 agent...). Each folder becomes a top-level page, sub-folders and notes become sub-pages; ``[[links]]`` between notes
 are resolved like Obsidian (path first, then file name). Changes on disk show up within a few seconds.
 
+Icons: ``icon:`` (or ``emoji:``) in a note's front matter, else ``.carnet-icons.json`` at the folder root
+(``{"icons": {"relative/path/without/.md": "🖥️", "Sub folder": "📁"}}``), else 📁 for folders and 📅 for notes
+named like a date.
+
 Pages from a folder have stable ids (``md`` + hash of folder name and relative path), ``readonly: true`` and a
 ``source`` {folder, path}. Writes to them are refused by the API.
 """
@@ -22,6 +26,9 @@ from . import markdown as md
 
 MAX_FILE = 2_000_000
 RESCAN_SECONDS = 3.0
+ICONS_FILE = ".carnet-icons.json"
+DATE_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}")
+FM_ICON = re.compile(r"^(?:icon|emoji)\s*:\s*[\"']?([^\"'\n]{1,16}?)[\"']?\s*$", re.M)
 SKIP_DIRS = {".git", ".obsidian", ".trash", ".stfolder", "node_modules", "__pycache__"}
 
 
@@ -75,6 +82,8 @@ class MdFolders:
     def _signature(self):
         sig = []
         for name, root in self.specs:
+            ic = root / ICONS_FILE
+            sig.append((str(ic), ic.stat().st_mtime_ns if ic.is_file() else 0))
             for d, files in self._walk(root):
                 sig.append((str(d), d.stat().st_mtime_ns))
                 for f in files:
@@ -97,8 +106,14 @@ class MdFolders:
             pages = {}
             for pos, (name, root) in enumerate(self.specs):
                 root_real = root.resolve()
+                try:
+                    import json
+                    self._icons = {str(k).strip("/"): str(v)[:16] for k, v in
+                                   (json.loads((root / ICONS_FILE).read_text(encoding="utf-8")).get("icons") or {}).items()}
+                except (OSError, ValueError, AttributeError):
+                    self._icons = {}
                 rid = self.make_id(name, "")
-                pages[rid] = self._summary(rid, None, name, "📁", 1e6 + pos, root, directory=True, folder=name, rel="")
+                pages[rid] = self._summary(rid, None, name, "", 1e6 + pos, root, directory=True, folder=name, rel="")
                 dir_ids = {root: rid}
                 for d, files in self._walk(root):
                     if d != root:
@@ -117,7 +132,11 @@ class MdFolders:
                         rel = p.relative_to(root).as_posix()
                         stem = p.stem
                         if d != root and stem == d.name:           # folder note: becomes the folder page itself
-                            pages[dir_ids[d]].update(_file=p, updated_at=_iso(p.stat().st_mtime))
+                            note = self._summary("x", None, stem, "", 0, p, folder=name, rel=rel)
+                            upd = {"_file": p, "updated_at": _iso(p.stat().st_mtime)}
+                            if note["icon"] and pages[dir_ids[d]]["icon"] == "📁":
+                                upd["icon"] = note["icon"]
+                            pages[dir_ids[d]].update(upd)
                             continue
                         nid = self.make_id(name, rel)
                         pages[nid] = self._summary(nid, dir_ids[d], stem, "", i + 1, p, folder=name, rel=rel)
@@ -150,6 +169,20 @@ class MdFolders:
             mt = path.stat().st_mtime
         except OSError:
             mt = time.time()
+        key = rel[:-3] if rel.endswith(".md") else rel
+        found = ""
+        if not directory:
+            try:
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    head = fh.read(1500)
+                if head.startswith("---"):
+                    end = head.find("\n---", 3)
+                    m = FM_ICON.search(head[:end if end > 0 else 0])
+                    found = m.group(1).strip() if m else ""
+            except OSError:
+                pass
+        icon = found or getattr(self, "_icons", {}).get(key) or icon or \
+            ("📁" if directory else "📅" if DATE_NAME.match(title) else "")
         return {"id": pid, "parent_id": parent, "kind": "page", "title": title, "icon": icon, "position": position,
                 "favorite": None, "is_template": 0, "inline": 0, "updated_at": _iso(mt), "created_at": _iso(mt),
                 "readonly": True, "source": {"folder": folder, "path": rel or ""},

@@ -126,7 +126,7 @@ python3 -m carnet import ~/Obsidian/MyVault           # or a .zip, or one .md fi
 docker compose run --rm -v ~/Obsidian/MyVault:/import:ro carnet import /import
 ```
 
-**Or keep your files where they are:** `CARNET_MD_FOLDERS=Vault=/path/to/vault` shows a folder of Markdown files in the sidebar, read-only, as pages: sub-folders become sub-pages, a folder note becomes the folder page, `[[links]]` resolve like in Obsidian, and backlinks and search include them. The files stay the source of truth, so you can keep editing them with Obsidian, a script or an AI agent. Changes appear within seconds. Writing to these pages through the app or the API is refused (403).
+**Or keep your files where they are:** `CARNET_MD_FOLDERS=Vault=/path/to/vault` shows a folder of Markdown files in the sidebar, read-only, as pages: sub-folders become sub-pages, a folder note becomes the folder page, `[[links]]` resolve like in Obsidian, and backlinks and search include them. The files stay the source of truth, so you can keep editing them with Obsidian, a script or an AI agent. Changes appear within seconds. Icons come from `icon:` in the front matter or a `.carnet-icons.json` at the folder root (`{"icons": {"path/without/.md": "🖥️"}}`). Writing to these pages through the app or the API is refused (403).
 
 **Leaving is just as easy:** *Settings → Export everything* downloads a zip of Markdown files (sub-pages in folders, attachments in `_files/`) that opens directly as an Obsidian vault. Any page: *⋯ → Export as Markdown / PDF*; any database: *view menu → Export as CSV*.
 

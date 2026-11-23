@@ -81,3 +81,17 @@ class MdFoldersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MdIconsTest(unittest.TestCase):
+    def test_icons(self):
+        root = Path(tempfile.mkdtemp()) / "v"
+        (root / "Journal").mkdir(parents=True)
+        (root / "Homelab").mkdir()
+        (root / "Journal" / "2026-11-23.md").write_text("x")
+        (root / "Homelab" / "srv-01.md").write_text("x")
+        (root / "Avec icone.md").write_text("---\ntags: [a]\nicon: 🚀\n---\nx")
+        (root / ".carnet-icons.json").write_text(json.dumps({"icons": {"Homelab": "🖥️", "Homelab/srv-01": "💻", "": "🤖"}}))
+        f = MdFolders(parse_spec(f"V={root}"))
+        icons = {p["title"]: p["icon"] for p in f.tree()}
+        self.assertEqual(icons, {"V": "🤖", "Journal": "📁", "2026-11-23": "📅", "Homelab": "🖥️", "srv-01": "💻", "Avec icone": "🚀"})
