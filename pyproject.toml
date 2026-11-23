@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "carnet"
+dynamic = ["version"]
+description = "A self-hosted, open-source Notion alternative: block editor, nested pages, databases (table, board, list, gallery, calendar), Docs-style toolbar, reading mode, Obsidian/Notion import, Markdown export and a JSON API."
+readme = "README.md"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Mathyou André" }]
+requires-python = ">=3.10"
+keywords = ["notes", "notion", "obsidian", "wiki", "knowledge-base", "self-hosted", "markdown", "pwa"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Operating System :: OS Independent",
+  "Environment :: Web Environment",
+  "Topic :: Office/Business",
+]
+dependencies = []
+
+[project.scripts]
+carnet = "carnet.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/mathyouadr/carnet"
+
+[tool.setuptools]
+packages = ["carnet"]
+
+[tool.setuptools.dynamic]
+version = { attr = "carnet.__version__" }
+
+[tool.setuptools.package-data]
+carnet = ["static/*", "static/assets/*"]

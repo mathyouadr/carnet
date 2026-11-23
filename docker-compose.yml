@@ -1,0 +1,28 @@
+# Carnet - ready-made Docker Compose setup.
+#
+#   1. cp .env.example .env    (set at least CARNET_PASSWORD)
+#   2. docker compose up -d
+#   3. open http://<your-server>:8044
+#
+# Bring your Obsidian vault:  Settings > Import (a .zip of the vault)   or
+#   docker compose run --rm -v /path/to/vault:/import:ro carnet import /import
+services:
+  carnet:
+    image: ghcr.io/mathyouadr/carnet:latest   # published image (pulled first)
+    build: .                                   # fallback: built from this folder if the pull fails
+    container_name: carnet
+    restart: unless-stopped
+    ports:
+      - "8044:8044"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CARNET_DATA_DIR: /data
+    volumes:
+      - carnet-data:/data              # your notes (carnet.db) and uploaded files (files/)
+      # Prefer a plain folder? Replace the line above with ./data:/data, then: mkdir data && sudo chown 1000:1000 data
+      # - ./config:/config:ro          # files for CARNET_EXTRA_HEAD=@/config/head.html
+
+volumes:
+  carnet-data:

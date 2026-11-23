@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+.venv/
+web/node_modules/
+# the web app is built by `cd web && npm ci && npm run build` (or by the Dockerfile)
+carnet/static/

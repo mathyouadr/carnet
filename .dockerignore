@@ -1,0 +1,11 @@
+.git
+.github
+docs
+tests
+deploy
+data
+.env
+**/__pycache__
+*.db*
+web/node_modules
+carnet/static
