@@ -10,6 +10,15 @@ const FR: Record<string, string> = {
   "Export as CSV": "Exporter en CSV", "Full width": "Pleine largeur", "Small text": "Petit texte", "Font": "Police",
   "Lock page": "Verrouiller la page", "Unlock page": "Déverrouiller la page", "Turn into template": "Transformer en modèle",
   "Stop being a template": "Ne plus être un modèle", "Copy link": "Copier le lien", "Link copied": "Lien copié",
+  "Share to the web": "Partager sur le web", "Shared to the web": "Partagée sur le web", "Public link": "Lien public",
+  "Anyone with the link can read this page and its sub-pages. They can't edit anything or see your other pages.":
+    "Toute personne qui a le lien peut lire cette page et ses sous-pages. Elle ne peut rien modifier ni voir vos autres pages.",
+  "Public link created": "Lien public créé", "Public link removed": "Lien public retiré", "Copy": "Copier",
+  "Already public through the link of": "Déjà publique via le lien de",
+  "This link only works where Carnet itself is reachable: set CARNET_SHARE_URL to publish it.":
+    "Ce lien ne marche que là où Carnet est joignable : réglez CARNET_SHARE_URL pour le publier.",
+  "Turning the link off makes it stop working at once. Turning it on again gives a new link.":
+    "Couper le lien le désactive tout de suite. Le réactiver donne un nouveau lien.",
   "Add icon": "Ajouter une icône", "Add cover": "Ajouter une couverture", "Change cover": "Changer la couverture",
   "Remove": "Retirer", "Remove icon": "Retirer l'icône", "Random": "Aléatoire", "Upload": "Importer",
   "Paste a link to an image": "Collez le lien d'une image", "Gallery": "Galerie", "Link": "Lien",

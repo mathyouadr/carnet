@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   Menu as MenuIcon, ChevronsRight, FileText, Star, MoreHorizontal, Pencil, BookOpen, Copy, CornerUpRight, Trash2, History,
-  FileDown, Printer, Lock, Unlock, LayoutTemplate, MoveHorizontal, CaseSensitive, Link2, X, Maximize2, RotateCcw, Type,
+  FileDown, Printer, Lock, Unlock, LayoutTemplate, MoveHorizontal, CaseSensitive, Link2, X, Maximize2, RotateCcw, Type, Globe,
 } from "lucide-react";
 import { api, BASE, BOOT, Page } from "../api";
 import { AppProvider, pagePath, useApp } from "./store";
 import { Sidebar } from "./Sidebar";
 import { HistoryModal, Login, MoveDialog, SearchPalette, SettingsModal, TemplatesPanel, TrashPanel } from "./Dialogs";
 import { PageView } from "../page/PageView";
+import { ShareDialog } from "./Share";
 import { relTime, t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
 import { seedWelcome } from "./welcome";
@@ -43,6 +44,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [hist, setHist] = useState(false);
   const [move, setMove] = useState(false);
+  const [share, setShare] = useState(false);
   const s = page ? app.byId.get(page.id) : undefined;
   const crumbs = page?.path || [];
   const opt = page?.options || {};
@@ -78,6 +80,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
             <button type="button" className={mode === "read" ? "on" : ""} onClick={() => setMode("read")} title="Ctrl+Shift+L"><BookOpen size={14} /> <span>{t("Read")}</span></button>
           </div>
           )}
+          {!page.readonly && page.share && <button type="button" className="cn-icon-btn shared" title={t("Shared to the web")} onClick={() => setShare(true)}><Globe size={17} /></button>}
           {!page.readonly && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
             onClick={async () => { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); app.refresh(); }}>
             <Star size={17} fill={s?.favorite ? "currentColor" : "none"} />
@@ -104,6 +107,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           <MenuItem icon={<MoveHorizontal size={15} />} right={<input type="checkbox" readOnly checked={!!opt.full_width} />} onClick={() => setOpt({ full_width: !opt.full_width })}>{t("Full width")}</MenuItem>
           <MenuItem icon={opt.locked ? <Unlock size={15} /> : <Lock size={15} />} onClick={() => { setOpt({ locked: !opt.locked }); setMode(opt.locked ? "edit" : "read"); setMenu(null); }}>{opt.locked ? t("Unlock page") : t("Lock page")}</MenuItem>
           <MenuSep />
+          <MenuItem icon={<Globe size={15} />} right={page.share ? <span className="cn-dot-on" /> : undefined} onClick={() => { setShare(true); setMenu(null); }}>{t("Share to the web")}</MenuItem>
           <MenuItem icon={<Link2 size={15} />} onClick={() => { navigator.clipboard?.writeText(location.origin + pagePath(page.id)).then(() => app.toast(t("Link copied"))); setMenu(null); }}>{t("Copy link")}</MenuItem>
           <MenuItem icon={<Copy size={15} />} onClick={async () => { const c = await api.post(`/api/pages/${page.id}/duplicate`); await app.refresh(); app.navigate(c.id); setMenu(null); }}>{t("Duplicate")}</MenuItem>
           <MenuItem icon={<CornerUpRight size={15} />} onClick={() => { setMove(true); setMenu(null); }}>{t("Move to")}</MenuItem>
@@ -120,6 +124,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
       )}
       {hist && page && <HistoryModal pageId={page.id} onClose={() => setHist(false)} onRestored={onRestored} />}
       {move && page && <MoveDialog page={page} onClose={() => setMove(false)} />}
+      {share && page && <ShareDialog pageId={page.id} onClose={() => setShare(false)} onChange={onRestored} />}
     </header>
   );
 }

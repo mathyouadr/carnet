@@ -16,6 +16,10 @@ Databases
   GET    /api/databases/{id}/rows?Prop=value  rows (with their property values), simple equality filters
   POST   /api/databases/{id}/rows            add a row {title, props: {"Name or id": value}, markdown}
   GET    /api/pages/{id}/export.csv
+Public links (read only, the page and its sub-pages)
+  GET    /api/pages/{id}/share              {shared, token, path, url}
+  POST   /api/pages/{id}/share              create the link (or return the existing one)
+  DELETE /api/pages/{id}/share              remove it: the old link stops working
 Other
   GET    /api/search?q=                      full-text search
   GET    /api/trash ; POST /api/trash/empty
@@ -70,6 +74,9 @@ class API:
         r("GET", f"/api/pages/{ID}/versions", lambda b, q, i: {"results": self.s.versions(i)})
         r("GET", r"/api/versions/(\d+)", lambda b, q, v: self.s.version(int(v)))
         r("POST", r"/api/versions/(\d+)/restore", lambda b, q, v: self.s.restore_version(int(v)))
+        r("GET", f"/api/pages/{ID}/share", lambda b, q, i: self.share_info(i))
+        r("POST", f"/api/pages/{ID}/share", lambda b, q, i: self.s.share_create(i) and self.share_info(i))
+        r("DELETE", f"/api/pages/{ID}/share", lambda b, q, i: self.s.share_delete(i) or self.share_info(i))
         r("GET", f"/api/databases/{ID}/rows", self.db_rows)
         r("POST", f"/api/databases/{ID}/rows", self.add_row)
         r("GET", "/api/search", self.search)
@@ -178,6 +185,17 @@ class API:
         if page["kind"] != "database":
             raise HTTPError(400, "not a database")
         return self.s.create({**b, "parent_id": pid, "kind": "page"})
+
+    def share_info(self, pid):
+        self.s._row(pid)
+        sh = self.s.share_get(pid)
+        if not sh:
+            up = next((a for a in reversed(self.s.path(pid)[:-1]) if self.s.share_get(a["id"])), None)
+            return {"shared": False, "inherited": {"id": up["id"], "title": up["title"]} if up else None}
+        base = self.app.c.base_path if self.app else ""
+        public = self.app.c.share_url if self.app else ""
+        return {"shared": True, "token": sh["token"], "created_at": sh["created_at"],
+                "path": f"{base}/s/{sh['token']}", "url": f"{public}/s/{sh['token']}" if public else ""}
 
     def empty_trash(self, b, q):
         n = 0

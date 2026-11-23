@@ -110,4 +110,5 @@ export type Page = Summary & {
   schema?: Schema; views?: View[]; rows?: Row[];
   database?: { id: string; title: string; icon: string; schema: Schema };
   backlinks: Summary[]; children: Summary[];
+  share?: { token: string; created_at: string } | null;
 };

@@ -54,6 +54,16 @@ callouts, `$inline$` and `$$block$$` math, `==highlight==`, `- [ ]` tasks, table
 A schema is `{title_name, properties: [{id, name, type, options?, database_id?, format?, time?}]}`; a view is
 `{id, name, type: table|board|list|gallery|calendar, filters, filter_mode, sorts, hidden, widths, group_by, date_prop, card_cover, card_size, wrap}`.
 
+## Public links
+
+| Method | Path | |
+| --- | --- | --- |
+| `GET` | `/api/pages/{id}/share` | `{shared, token, path, url}`; when not shared, `inherited` = the shared ancestor that already makes it public, if any |
+| `POST` | `/api/pages/{id}/share` | create the link (returns the existing one if there is one) |
+| `DELETE` | `/api/pages/{id}/share` | remove it: the old link answers 404 at once |
+
+The link itself is `/s/{token}` (sub-pages: `/s/{token}/{page id}`), with no login. It is plain HTML, read only.
+
 ## Other
 
 | Method | Path | |

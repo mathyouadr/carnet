@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS files (
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS shares (
+    page_id TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -264,6 +269,7 @@ class Store:
         d["backlinks"] = [self.summary(b) for b in self.q(
             "SELECT p.* FROM links l JOIN pages p ON p.id = l.src WHERE l.dst=? AND l.src<>? ORDER BY p.title",
             (pid, pid)) if b["id"] in alive]
+        d["share"] = self.share_get(pid)
         d["children"] = [dict(self.summary(c)) for c in self.q(
             "SELECT * FROM pages WHERE parent_id=? AND trashed_at IS NULL ORDER BY position, created_at", (pid,))]
         return d
@@ -462,6 +468,7 @@ class Store:
                 self.x("DELETE FROM pages WHERE id=?", (i,))
                 self.x("DELETE FROM versions WHERE page_id=?", (i,))
                 self.x("DELETE FROM links WHERE src=? OR dst=?", (i, i))
+                self.x("DELETE FROM shares WHERE page_id=?", (i,))
                 if self.fts:
                     self.x("DELETE FROM search WHERE id=?", (i,))
         return {"ok": True, "deleted": len(ids)}
@@ -510,6 +517,38 @@ class Store:
                 for n, sid in enumerate(sib):
                     self.x("UPDATE pages SET position=? WHERE id=?", (n, sid))
         return self.page(mapping[pid])
+
+    # ------------------------------------------------------------------ public links (read only)
+    def share_get(self, pid):
+        r = self.q1("SELECT token, created_at FROM shares WHERE page_id=?", (pid,))
+        return dict(r) if r else None
+
+    def share_create(self, pid) -> dict:
+        """A secret link that shows the page and its sub-pages read only, to anyone who has it."""
+        r = self._row(pid)
+        if r["trashed_at"] or pid not in self.alive_ids():
+            raise Invalid("this page is in the trash")
+        cur = self.share_get(pid)
+        if cur:
+            return cur
+        self.x("INSERT INTO shares (page_id, token, created_at) VALUES (?, ?, ?)",
+               (pid, secrets.token_urlsafe(18), now()))
+        return self.share_get(pid)
+
+    def share_delete(self, pid):
+        self.x("DELETE FROM shares WHERE page_id=?", (pid,))
+
+    def share_root(self, token) -> str:
+        """Id of the live page a token opens, else NotFound (unknown token, page in the trash)."""
+        if not isinstance(token, str) or not 20 <= len(token) <= 64:
+            raise NotFound("share")
+        r = self.q1("SELECT page_id FROM shares WHERE token=?", (token,))
+        if not r or r["page_id"] not in self.alive_ids():
+            raise NotFound("share")
+        return r["page_id"]
+
+    def shared_ids(self) -> set:
+        return {r["page_id"] for r in self.q("SELECT page_id FROM shares")}
 
     def from_template(self, template_id, parent_id, title=None) -> dict:
         return self.duplicate(template_id, parent_id=parent_id, as_template=False, title=title)

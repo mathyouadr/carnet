@@ -128,6 +128,12 @@ docker compose run --rm -v ~/Obsidian/MyVault:/import:ro carnet import /import
 
 **Or keep your files where they are:** `CARNET_MD_FOLDERS=Vault=/path/to/vault` shows a folder of Markdown files in the sidebar, read-only, as pages: sub-folders become sub-pages, a folder note becomes the folder page, `[[links]]` resolve like in Obsidian, and backlinks and search include them. The files stay the source of truth, so you can keep editing them with Obsidian, a script or an AI agent. Changes appear within seconds. Icons come from `icon:` in the front matter or a `.carnet-icons.json` at the folder root (`{"icons": {"path/without/.md": "🖥️"}}`). Writing to these pages through the app or the API is refused (403).
 
+## 🌍 Share a page to the web
+
+**⋯ → Share to the web** gives a secret link (`/s/<token>`) that shows the page and its sub-pages **read only** to anyone who has it, without logging in: plain HTML that looks like Carnet (light or dark, formulas, tables, databases), no app and no API. Links to pages that are not shared are dropped, files are served only if a shared page shows them, and pages are marked `noindex`. Turning the link off makes it stop working at once.
+
+To publish shared pages without exposing your notes, set `CARNET_SHARE_PORT=8045` (and `CARNET_SHARE_URL`): that port answers **only** `/s/...`, so a Cloudflare Tunnel or a reverse proxy can point a public host name at it while Carnet itself stays private.
+
 **Leaving is just as easy:** *Settings → Export everything* downloads a zip of Markdown files (sub-pages in folders, attachments in `_files/`) that opens directly as an Obsidian vault. Any page: *⋯ → Export as Markdown / PDF*; any database: *view menu → Export as CSV*.
 
 ## 🔌 API
@@ -170,6 +176,9 @@ Environment variables (or a `.env` file next to where you start it):
 | `CARNET_SECURE_COOKIE` / `CARNET_TRUST_PROXY` | off | Behind HTTPS / a reverse proxy. |
 | `CARNET_MAX_UPLOAD_MB` | `50` | Largest upload. |
 | `CARNET_MD_FOLDERS` | | Markdown folders shown **read-only** next to your pages: `Name=/path;Other=/path`. |
+| `CARNET_SHARE_PORT` | `0` | A second listener that serves **only** public links (`/s/...`): put this one behind a tunnel or reverse proxy. |
+| `CARNET_SHARE_HOST` | `127.0.0.1` | Address of that listener. |
+| `CARNET_SHARE_URL` | | Public address of that listener (e.g. `https://share.example.org`), used for the links the app gives you. |
 | `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). |
 
 ## ⌨️ Shortcuts
