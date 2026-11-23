@@ -572,3 +572,12 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-ro-note code { font-size: 12px; background: var(--cn-bg-2); padding: 1px 5px; border-radius: 4px; }
 .cn-side-ro { font-size: 10.5px; font-weight: 600; color: var(--cn-fg-3); border: 1px solid var(--cn-line-2); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
 @media (max-width: 760px) { .cn-ro-badge span { display: none; } }
+
+/* grouped gallery */
+.cn-gal-groups { display: flex; flex-direction: column; gap: 6px; }
+.cn-gal-head { display: inline-flex; align-items: center; gap: 8px; padding: 6px 4px; background: none; border: 0; color: var(--cn-fg-2); cursor: pointer; font: inherit; font-size: 14px; }
+.cn-gal-head svg { transition: transform .15s; }
+.cn-gal-head svg.open { transform: rotate(90deg); }
+.cn-gal-group > .cn-gallery { margin-bottom: 10px; }
+.cn-gallery .cn-card.add { min-height: 0; align-self: start; padding: 14px; justify-content: center; }
+.cn-card-prop { display: flex; align-items: center; gap: 4px; }

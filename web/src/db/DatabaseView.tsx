@@ -197,9 +197,10 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
               </button>
             ))}
           </div>
-          {view.type === "board" && (
+          {(view.type === "board" || view.type === "gallery") && (
             <div className="pad row"><span className="cn-muted">{t("Group by")}</span>
               <select className="cn-input" value={view.group_by || ""} onChange={(e) => onView({ ...view, group_by: e.target.value })}>
+                {view.type === "gallery" && <option value="">{t("None")}</option>}
                 {schema.properties.filter((p) => ["select", "status", "multi_select"].includes(p.type)).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select></div>
           )}

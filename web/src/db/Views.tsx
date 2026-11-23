@@ -145,7 +145,9 @@ export function presetFromFilters(view: View, schema: Schema): Record<string, an
 function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
   row: Row; schema: Schema; view: View; open: () => void; cover?: boolean; draggable?: boolean; onDragStart?: (e: React.DragEvent) => void;
 }) {
-  const props = visibleProps(schema, view).filter((p) => p.id !== view.group_by && !isEmpty(valueOf(row, p.id, schema)));
+  // on cards, an unticked checkbox says nothing: show it only when ticked (with its name)
+  const props = visibleProps(schema, view).filter((p) => p.id !== view.group_by && !isEmpty(valueOf(row, p.id, schema))
+    && !(p.type === "checkbox" && !valueOf(row, p.id, schema)));
   const mode = view.card_cover || "cover";
   return (
     <div className="cn-card" onClick={open} draggable={draggable} onDragStart={onDragStart}>
@@ -153,7 +155,7 @@ function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
       {cover && mode === "content" && <div className="cn-card-preview">{row.preview}</div>}
       <div className="cn-card-body">
         <div className="cn-card-title">{row.icon && <span className="ic">{row.icon}</span>}{row.title || <span className="cn-placeholder">{t("Untitled")}</span>}</div>
-        {props.map((p) => <div key={p.id} className="cn-card-prop"><ValueView prop={p} value={valueOf(row, p.id, schema)} compact /></div>)}
+        {props.map((p) => <div key={p.id} className="cn-card-prop"><ValueView prop={p} value={valueOf(row, p.id, schema)} compact />{p.type === "checkbox" && <span className="cn-muted"> {p.name}</span>}</div>)}
       </div>
     </div>
   );
@@ -262,10 +264,39 @@ export function ListView({ rows, schema, view, readOnly, onAdd, open }: ViewProp
 
 // ================================================================== gallery
 export function GalleryView({ rows, schema, view, readOnly, onAdd, open }: ViewProps) {
-  return (
+  const gp = view.group_by ? schema.properties.find((p) => p.id === view.group_by && ["select", "status", "multi_select"].includes(p.type)) : undefined;
+  const [closed, setClosed] = useState<string[]>(view.collapsed || []);
+  const grid = (list: Row[], preset: Record<string, any>) => (
     <div className={`cn-gallery ${view.card_size || "medium"}`}>
-      {rows.map((r) => <Card key={r.id} row={r} schema={schema} view={view} open={() => open(r.id)} cover />)}
-      {!readOnly && <button type="button" className="cn-card add" onClick={() => onAdd(presetFromFilters(view, schema), true)}><Plus size={16} /> {t("New")}</button>}
+      {list.map((r) => <Card key={r.id} row={r} schema={schema} view={view} open={() => open(r.id)} cover />)}
+      {!readOnly && <button type="button" className="cn-card add" onClick={() => onAdd({ ...presetFromFilters(view, schema), ...preset }, true)}><Plus size={16} /> {t("New")}</button>}
+    </div>
+  );
+  if (!gp) return grid(rows, {});
+  const inGroup = (r: Row, gid: string) => {
+    const val = r.props?.[gp.id];
+    if (gp.type === "multi_select") return gid ? (val || []).includes(gid) : !(val || []).length;
+    return gid ? val === gid : !val;
+  };
+  const groups = [...(gp.options || []).map((o) => ({ id: o.id, name: o.name, color: o.color })),
+    { id: "", name: `${t("No")} ${gp.name}`, color: "default" }]
+    .map((g) => ({ ...g, rows: rows.filter((r) => inGroup(r, g.id)) }))
+    .filter((g) => g.rows.length || ((view as any).show_empty && g.id));
+  return (
+    <div className="cn-gal-groups">
+      {groups.map((g) => {
+        const shut = closed.includes(g.id);
+        return (
+          <section key={g.id || "_none"} className="cn-gal-group">
+            <button type="button" className="cn-gal-head" onClick={() => setClosed(shut ? closed.filter((x) => x !== g.id) : [...closed, g.id])}>
+              <ChevronRight size={15} className={shut ? "" : "open"} />
+              <span className={`cn-chip c-${g.color}`}>{g.name}</span>
+              <span className="cn-muted">{g.rows.length}</span>
+            </button>
+            {!shut && grid(g.rows, g.id ? { [gp.id]: gp.type === "multi_select" ? [g.id] : g.id } : {})}
+          </section>
+        );
+      })}
     </div>
   );
 }
