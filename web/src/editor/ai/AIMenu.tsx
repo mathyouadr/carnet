@@ -12,7 +12,7 @@ import { t } from "../../i18n";
 import { sanitize } from "../sanitize";
 import { aiBlocks, aiStream } from "./stream";
 import type { AIMessage, AIRequest } from "./stream";
-import { stripFence, wordDiff } from "./text";
+import { mdPlain, mdPreview, stripFence, wordDiff } from "./text";
 
 type Cmd = { id: string; label: string; icon: ReactNode };
 const SELECTION_CMDS: Cmd[] = [
@@ -38,6 +38,13 @@ const AROUND = 30;
 export const aiName = () => BOOT.ai?.name || "AI";
 const withName = (s: string) => t(s).replace("{name}", aiName());
 
+/** Server messages are English; show them in the UI language. */
+function localError(msg: string): string {
+  const m = /^AI server error \((\d+)\)$/.exec(msg);
+  if (m) return t("AI server error ({code})").replace("{code}", m[1]);
+  return t(msg);
+}
+
 /** Index in `doc` (top level) of the block holding `id`, itself or as a descendant. */
 function topIndex(doc: any[], id: string): number {
   const has = (b: any): boolean => b.id === id || (b.children || []).some(has);
@@ -57,7 +64,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
   const [followup, setFollowup] = useState("");
-  const [last, setLast] = useState<{ command: string; prompt: string; history: AIMessage[] } | null>(null);
+  const [last, setLast] = useState<{ command: string; prompt: string; history: AIMessage[]; rewrite: boolean } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -91,11 +98,12 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
     return { page_id: pageId, command, prompt, selection: hasSelection ? blocksNow() : [], context, history };
   };
 
-  const run = async (command: string, prompt = "", history: AIMessage[] = []) => {
+  /** `rewrite`: the answer replaces the selection (diff + Replace); follow-ups keep the mode of the first command. */
+  const run = async (command: string, prompt = "", history: AIMessage[] = [], rewrite = REWRITE.has(command)) => {
     ctrl.current?.abort();
     const c = new AbortController();
     ctrl.current = c;
-    setLast({ command, prompt, history });
+    setLast({ command, prompt, history, rewrite });
     setAnswer(""); setError(""); setStale(false); setFollowup("");
     setPhase("stream");
     let text = "";
@@ -109,7 +117,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       setPhase("done");
     } catch (e: any) {
       if (c.signal.aborted) return;
-      setError(e?.message || String(e));
+      setError(localError(e?.message || String(e)));
       setPhase("error");
     }
   };
@@ -119,7 +127,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   const sendFollowup = () => {
     if (!last || !followup.trim()) return;
     const asked = last.prompt ? `${cmdLabel(last.command)}: ${last.prompt}` : cmdLabel(last.command);
-    run("custom", followup.trim(), [...last.history, { role: "user", content: asked }, { role: "assistant", content: answer }]);
+    run("custom", followup.trim(), [...last.history, { role: "user", content: asked }, { role: "assistant", content: answer }], last.rewrite);
   };
 
   /** mode: "replace" the selection, "insert" (generation: after the blocks, or instead of an empty line), "below". */
@@ -148,7 +156,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       onClose();
       setTimeout(() => editor.focus(), 0);
     } catch (e: any) {
-      setError(e?.message || String(e));
+      setError(localError(e?.message || String(e)));
     }
   };
 
@@ -163,7 +171,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
     }
   };
 
-  const rewrite = !!last && REWRITE.has(last.command);
+  const rewrite = !!last && last.rewrite;
   const name = aiName();
 
   return (
@@ -193,8 +201,9 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
         <div className="cn-ai-result">
           <div className="cn-ai-answer">
             {phase === "stream" && !answer && <span className="cn-ai-thinking">{withName("{name} is thinking…")}</span>}
-            {(phase === "stream" || !rewrite) && answer && <span>{stripFence(answer)}</span>}
-            {phase === "done" && rewrite && wordDiff(selMd, stripFence(answer)).map((p, i) =>
+            {(phase === "stream" || !rewrite) && answer &&
+              <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: mdPreview(stripFence(answer)) }} />}
+            {phase === "done" && rewrite && wordDiff(mdPlain(selMd), mdPlain(stripFence(answer))).map((p, i) =>
               <span key={i} className={p.op === "del" ? "cn-ai-del" : p.op === "ins" ? "cn-ai-ins" : ""}>{p.text}</span>)}
             {phase === "error" && <div className="cn-ai-error">{error}</div>}
           </div>
@@ -215,7 +224,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
               <button type="button" className="cn-ai-btn" onClick={() => apply("below")}><CornerDownLeft size={14} />{t("Insert below")}</button>
             )}
             {(phase === "done" || phase === "error") && last && (
-              <button type="button" className="cn-ai-btn" onClick={() => run(last.command, last.prompt, last.history)}>
+              <button type="button" className="cn-ai-btn" onClick={() => run(last.command, last.prompt, last.history, last.rewrite)}>
                 <RotateCcw size={14} />{t("Retry")}
               </button>
             )}

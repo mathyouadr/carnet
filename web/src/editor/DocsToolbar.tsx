@@ -6,7 +6,7 @@ import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Code, Baseline, Highlighter, AlignLeft, AlignCenter,
   AlignRight, AlignJustify, List, ListOrdered, ListChecks, Link2, Image as ImageIcon, Table, SquareFunction,
   Sigma, IndentIncrease, IndentDecrease, RemoveFormatting, ChevronDown, Plus, Quote, Minus, MessageSquareQuote,
-  ListCollapse, ListTree, AppWindow, Columns2, FileCode2, Paperclip, Video,
+  ListCollapse, ListTree, AppWindow, Columns2, FileCode2, Paperclip, Video, Sparkles,
 } from "lucide-react";
 import { Popover, MenuItem, MenuSep, COLORS } from "../ui/Popover";
 import { useApp } from "../app/store";
@@ -55,7 +55,7 @@ function useKeyboardInset() {
   return inset;
 }
 
-export function DocsToolbar({ editor, pageId, slot }: { editor: any; pageId: string; slot?: string }) {
+export function DocsToolbar({ editor, pageId, slot, onAI }: { editor: any; pageId: string; slot?: string; onAI?: () => void }) {
   const app = useApp();
   const [, force] = useReducer((x) => x + 1, 0);
   useEditorSelectionChange(force, editor);
@@ -126,6 +126,7 @@ export function DocsToolbar({ editor, pageId, slot }: { editor: any; pageId: str
       <div className="cn-tb-scroll">
         <B title="Undo" onClick={() => editor.undo()}><Undo2 size={16} /></B>
         <B title="Redo" onClick={() => editor.redo()}><Redo2 size={16} /></B>
+        {onAI && <B title="Ask AI" onClick={onAI}><Sparkles size={16} className="cn-ai-spark" /></B>}
         <span className="cn-tb-sep" />
         <button type="button" className={`cn-tb-select ${pop?.k === "kind" ? "open" : ""}`} onMouseDown={(e) => e.preventDefault()} onClick={open("kind")}>
           <span>{t(kind.label)}</span><ChevronDown size={14} />

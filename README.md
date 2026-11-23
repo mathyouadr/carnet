@@ -74,6 +74,12 @@ Carnet (French for *notebook*) takes the best of the three:
 - Rows open in a **side peek** with their properties above the content, or as a full page.
 - Inline databases inside any page; CSV export.
 
+**AI assistant (optional)**
+- Notion-AI style: select text and click **✨ Ask AI**, type `/ai`, or press Space on an empty line.
+- Improve, fix spelling, shorten, lengthen, simplify, explain, translate, summarize, continue writing, or ask anything.
+- The answer streams into a card under the text, with removed words struck through and added words in green. **Replace**, **Insert below**, **Retry** or **Discard**; nothing changes until you accept, and one `Ctrl+Z` undoes it.
+- Works with any OpenAI-compatible endpoint (OpenAI, Ollama, OpenRouter, an agent such as Hermes Agent's API server). See [AI assistant](#-ai-assistant).
+
 **Everywhere**
 - Responsive down to 320 px: drawer sidebar, toolbar docked above the keyboard, bottom sheets, a calendar that becomes a day list.
 - Light and dark themes, English and French.
@@ -170,7 +176,28 @@ Environment variables (or a `.env` file next to where you start it):
 | `CARNET_SECURE_COOKIE` / `CARNET_TRUST_PROXY` | off | Behind HTTPS / a reverse proxy. |
 | `CARNET_MAX_UPLOAD_MB` | `50` | Largest upload. |
 | `CARNET_MD_FOLDERS` | | Markdown folders shown **read-only** next to your pages: `Name=/path;Other=/path`. |
+| `CARNET_AI_URL` | | OpenAI-compatible base URL (`…/v1`) for the AI assistant. Empty = no AI anywhere in the UI. |
+| `CARNET_AI_KEY` / `CARNET_AI_MODEL` | / `hermes-agent` | Bearer key (stays on the server) and model name sent to that endpoint. |
+| `CARNET_AI_NAME` / `CARNET_AI_SYSTEM` / `CARNET_AI_TIMEOUT` | `AI` / / `120` | Name shown in the UI, extra system prompt (`@/path` reads a file), seconds. |
 | `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). |
+
+## ✨ AI assistant
+
+Set `CARNET_AI_URL` to any OpenAI-compatible `chat/completions` endpoint and the editor gets an *Ask AI* menu. The browser only talks to Carnet: Carnet adds the key, calls the endpoint and streams the answer back, so the URL and the key never reach the page.
+
+> [!WARNING]
+> The selected text, the surrounding part of the page and, for free requests, short excerpts of related notes are **sent to that endpoint**. Use a local model or a provider you trust with your notes.
+
+```bash
+# OpenAI
+CARNET_AI_URL=https://api.openai.com/v1 CARNET_AI_KEY=sk-... CARNET_AI_MODEL=gpt-4.1-mini
+# Ollama on the same machine
+CARNET_AI_URL=http://127.0.0.1:11434/v1 CARNET_AI_MODEL=llama3.1
+# Hermes Agent (API server): the assistant then knows you (memory, profile)
+CARNET_AI_URL=http://127.0.0.1:8642/v1 CARNET_AI_KEY=<API_SERVER_KEY> CARNET_AI_NAME=Hermes
+```
+
+With Hermes Agent, give the API server no tools (`platform_toolsets: {api_server: [no_mcp]}`): it still answers with its memory in context, and nothing written in a note can make it act. Markdown-folder pages and the trash have no AI. API: [`docs/api.md`](docs/api.md#ai-assistant).
 
 ## ⌨️ Shortcuts
 

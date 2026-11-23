@@ -59,3 +59,62 @@ export function stripFence(s: string): string {
   if (m && !m[1].includes("\n```")) return m[1].trim();
   return t;
 }
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function inline(s: string): string {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+    .replace(/(^|\W)_([^_\s][^_]*)_(?=\W|$)/g, "$1<em>$2</em>")
+    .replace(/~~([^~]+)~~/g, "<s>$1</s>")
+    .replace(/==([^=]+)==/g, "<mark>$1</mark>")
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a, b) => `<u>${b || a}</u>`)
+    .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, "<u>$1</u>");
+}
+
+/** Light Markdown → HTML for the answer preview (escaped first; the real conversion happens server-side on insert). */
+export function mdPreview(md: string): string {
+  const lines = md.replace(/\r/g, "").split("\n");
+  const out: string[] = [];
+  let list: "ul" | "ol" | null = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  let code: string[] | null = null;
+  for (const raw of lines) {
+    if (code) {
+      if (/^```/.test(raw)) { out.push(`<pre>${esc(code.join("\n"))}</pre>`); code = null; } else code.push(raw);
+      continue;
+    }
+    if (/^```/.test(raw)) { closeList(); code = []; continue; }
+    const line = raw.trimEnd();
+    let m: RegExpExecArray | null;
+    if (!line.trim()) { closeList(); continue; }
+    if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) { closeList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
+    if ((m = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/.exec(line))) {
+      closeList(); out.push(`<div>${m[1] === " " ? "☐" : "☑"} ${inline(m[2])}</div>`); continue;
+    }
+    if ((m = /^\s*[-*+]\s+(.*)$/.exec(line))) {
+      if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) {
+      if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    if ((m = /^>\s?(?:\[![a-z]+\]\s*)?(.*)$/i.exec(line))) { closeList(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+    closeList();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  if (code) out.push(`<pre>${esc(code.join("\n"))}</pre>`);
+  closeList();
+  return out.join("");
+}
+
+/** Markdown without inline markers (for the word diff of rewrites). */
+export function mdPlain(md: string): string {
+  return md
+    .replace(/\*\*([^*]+)\*\*/g, "$1").replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1").replace(/==([^=]+)==/g, "$1").replace(/~~([^~]+)~~/g, "$1")
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a, b) => b || a).replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+}

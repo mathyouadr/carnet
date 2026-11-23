@@ -1,19 +1,32 @@
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { combineByGroup, filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
 import { fr as bnFr, en as bnEn } from "@blocknote/core/locales";
 import { BlockNoteView } from "@blocknote/mantine";
-import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from "@blocknote/react";
+import {
+  FormattingToolbar, FormattingToolbarController, SuggestionMenuController, getDefaultReactSlashMenuItems,
+  getFormattingToolbarItems, useComponentsContext, useCreateBlockNote,
+} from "@blocknote/react";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { getMultiColumnSlashMenuItems, multiColumnDropCursor, locales as mcLocales } from "@blocknote/xl-multi-column";
 import { syntaxHighlighter } from "@blocknote/code-block";
-import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Plus } from "lucide-react";
-import { api, fileUrl, Page } from "../api";
+import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Plus, Sparkles } from "lucide-react";
+import { api, BOOT, fileUrl, Page } from "../api";
 import { useApp } from "../app/store";
 import { LANG, t } from "../i18n";
 import { schema } from "./schema";
 import { sanitize } from "./sanitize";
+import { AIMenu, aiName } from "./ai/AIMenu";
 import { DocsToolbar } from "./DocsToolbar";
 import { useTheme } from "../app/theme";
+
+/** ✨ in BlockNote's selection toolbar (desktop). */
+function AIToolbarButton({ onClick }: { onClick: () => void }) {
+  const C = useComponentsContext()!;
+  return <C.FormattingToolbar.Button className="cn-ai-tb" label={t("Ask {name}").replace("{name}", aiName())}
+    mainTooltip={t("Ask {name}").replace("{name}", aiName())} onClick={onClick}>
+    <Sparkles size={16} /><span className="cn-ai-tb-tx">{t("Ask AI")}</span>
+  </C.FormattingToolbar.Button>;
+}
 
 type EditorProps = {
   page: Page; editable: boolean; onChange: (blocks: any[]) => void; focusOnLoad?: boolean; toolbarSlot?: string; strict?: boolean;
@@ -64,6 +77,34 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   useEffect(() => {
     if (focusOnLoad && editable) setTimeout(() => editor.focus(), 50);
   }, [editor]);  // eslint-disable-line
+
+  // AI assistant: only when configured, on editable pages that are not Markdown files
+  const aiOn = !!BOOT.ai?.enabled && editable && !page.readonly;
+  const [ai, setAI] = useState<{ blockIds: string[]; hasSelection: boolean } | null>(null);
+  const openAI = useCallback(() => {
+    const sel = editor.getSelection();
+    const ids: string[] = (sel?.blocks || []).map((b: any) => b.id);
+    if (ids.length) return setAI({ blockIds: ids, hasSelection: true });
+    setAI({ blockIds: [editor.getTextCursorPosition().block.id], hasSelection: false });
+  }, [editor]);
+
+  // Space on an empty line opens the menu (Notion)
+  useEffect(() => {
+    const el = host.current;
+    if (!el || !aiOn) return;
+    const down = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return;
+      if (!(e.target as HTMLElement).closest?.(".bn-editor")) return;
+      if (editor.getSelection()) return;
+      const b = editor.getTextCursorPosition().block;
+      if (b.type !== "paragraph" || (b.content || []).length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openAI();
+    };
+    el.addEventListener("keydown", down, true);
+    return () => el.removeEventListener("keydown", down, true);
+  }, [editor, aiOn, openAI]);
 
   const slashItems = useMemo(() => async (query: string): Promise<DefaultReactSuggestionItem[]> => {
     const custom = [
@@ -125,9 +166,16 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: "embed" } as any),
       },
     ];
+    // "Ask AI" first, in its own group, like Notion
+    const aiItems: any[] = aiOn ? [{
+      title: t("Ask {name}").replace("{name}", aiName()), subtext: t("Write, edit, summarize…"), group: t("AI"),
+      aliases: ["ai", "ia", "assistant", "hermes", aiName().toLowerCase()],
+      icon: <Sparkles size={18} />,
+      onItemClick: () => setTimeout(openAI, 0),
+    }] : [];
     const defaults = getDefaultReactSlashMenuItems(editor);
-    return filterSuggestionItems(combineByGroup(defaults, getMultiColumnSlashMenuItems(editor), custom as any) as any, query) as any;
-  }, [editor, page.id, app]);
+    return filterSuggestionItems([...aiItems, ...combineByGroup(defaults, getMultiColumnSlashMenuItems(editor), custom as any)] as any, query) as any;
+  }, [editor, page.id, app, aiOn, openAI]);
 
   const mentionItems = useMemo(() => async (query: string): Promise<DefaultReactSuggestionItem[]> => {
     const q = query.toLowerCase();
@@ -151,12 +199,21 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
 
   return (
     <div ref={host} className={`cn-editor ${editable ? "edit" : "read"}`}>
-      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} />}
+      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? openAI : undefined} />}
       <BlockNoteView editor={editor} editable={editable} theme={theme} onChange={() => onChange(editor.document as any[])}
-        slashMenu={false} formattingToolbar={!app.mobile} sideMenu={editable && !app.mobile} emojiPicker>
+        slashMenu={false} formattingToolbar={!app.mobile && !aiOn} sideMenu={editable && !app.mobile} emojiPicker>
+        {aiOn && !app.mobile && (
+          <FormattingToolbarController formattingToolbar={() => (
+            <FormattingToolbar>
+              <AIToolbarButton key="ai" onClick={openAI} />
+              {...getFormattingToolbarItems()}
+            </FormattingToolbar>
+          )} />
+        )}
         <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
         <SuggestionMenuController triggerCharacter="@" getItems={mentionItems} />
       </BlockNoteView>
+      {ai && <AIMenu editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );
 }

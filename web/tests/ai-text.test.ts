@@ -39,3 +39,26 @@ test("stripFence removes one wrapping fence only", () => {
   const inner = "Texte\n\n```js\nx()\n```\n\nfin";
   assert.equal(stripFence(inner), inner);
 });
+
+import { mdPreview, mdPlain } from "../src/editor/ai/text.ts";
+
+test("mdPreview renders basic Markdown, escaped", () => {
+  const h = mdPreview("## Titre\n\nVoici une **suite** et *ça* et `x` et ==fluo==.\n\n- a\n- b\n\n1. un\n2. deux\n\n- [ ] faire\n- [x] fait\n\n> [!note] attention\n\n<script>alert(1)</script>");
+  assert.match(h, /<h2>Titre<\/h2>/);
+  assert.match(h, /<strong>suite<\/strong>/);
+  assert.match(h, /<em>ça<\/em>/);
+  assert.match(h, /<code>x<\/code>/);
+  assert.match(h, /<mark>fluo<\/mark>/);
+  assert.match(h, /<ul><li>a<\/li><li>b<\/li><\/ul>/);
+  assert.match(h, /<ol><li>un<\/li><li>deux<\/li><\/ol>/);
+  assert.match(h, /☐ faire/);
+  assert.match(h, /☑ fait/);
+  assert.match(h, /<blockquote>attention<\/blockquote>/);
+  assert.ok(!h.includes("<script>"));
+  assert.match(h, /&lt;script&gt;/);
+});
+
+test("mdPlain drops inline markers", () => {
+  assert.equal(mdPlain("**gras** et *ita* et `code` et ==fluo== et [[Page]]"), "gras et ita et code et fluo et Page");
+  assert.equal(mdPlain("- **a**\n- b"), "- a\n- b");
+});
