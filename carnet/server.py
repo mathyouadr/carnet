@@ -20,6 +20,7 @@ from pathlib import Path
 from . import __version__, transfer
 from .api import API, dumps
 from .config import Config
+from .mdfolders import MdFolders, parse_spec
 from .store import NotFound, Store
 
 log = logging.getLogger("carnet")
@@ -35,7 +36,8 @@ class App:
     def __init__(self, config: Config, store: Store | None = None):
         self.c = config
         self.store = store or Store(config.db_path)
-        self.api = API(self.store, self)
+        self.folders = MdFolders(parse_spec(config.md_folders))
+        self.api = API(self.store, self, self.folders)
         # the password is part of the signing key: changing it logs every session out
         self.secret = hashlib.sha256((self.store.secret("session_key") + "\0" + (config.password or "")).encode()).digest()
         self.failures: dict[str, list[float]] = {}
@@ -287,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/api/pages/") and path.endswith("/export.md") and method == "GET":
                 pid = path.split("/")[3]
                 try:
-                    text = transfer.page_markdown(self.app.store, pid)
+                    text = self.app.api.page_markdown(pid)
                     title = self.app.store.page(pid, with_rows=False)["title"] or "Untitled"
                 except NotFound:
                     return self.json(404, {"error": "not found"})

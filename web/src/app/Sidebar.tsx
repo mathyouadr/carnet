@@ -31,7 +31,8 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
   const [move, setMove] = useState<Summary | null>(null);
   const [drop, setDrop] = useState<DropPos>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const roots = app.children(null).filter((p) => !p.is_template);
+  const roots = app.children(null).filter((p) => !p.is_template && !p.readonly);
+  const mdRoots = app.children(null).filter((p) => p.readonly);
   const favs = useMemo(() => app.tree.filter((p) => p.favorite).sort((a, b) => (a.favorite || 0) - (b.favorite || 0)), [app.tree]);
 
   // keep the current page visible: expand its ancestors
@@ -83,11 +84,11 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
       <Fragment key={p.id}>
         <div className={`cn-node ${active ? "active" : ""} ${dp ? "drop-" + dp : ""} ${dragId === p.id ? "dragging" : ""}`}
           style={{ paddingLeft: 6 + depth * 14 }}
-          draggable={!p.is_row || true}
+          draggable={!p.readonly}
           onDragStart={(e) => { e.dataTransfer.setData("text/carnet-page", p.id); e.dataTransfer.effectAllowed = "move"; setDragId(p.id); }}
           onDragEnd={() => { setDragId(null); setDrop(null); }}
           onDragOver={(e) => {
-            if (!dragId || dragId === p.id) return;
+            if (!dragId || dragId === p.id || p.readonly) return;
             e.preventDefault();
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const y = (e.clientY - r.top) / r.height;
@@ -105,7 +106,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           <a className="cn-node-tx" href={pagePath(p.id)} onClick={(e) => e.preventDefault()} draggable={false}>{p.title || t("Untitled")}</a>
           <span className="cn-node-act">
             <button type="button" title={t("More")} onClick={(e) => { e.stopPropagation(); setMenu({ el: e.currentTarget, p }); }}><MoreHorizontal size={15} /></button>
-            <button type="button" title={t("Add a sub-page")} onClick={(e) => { e.stopPropagation(); addChild(p); }}><Plus size={15} /></button>
+            {!p.readonly && <button type="button" title={t("Add a sub-page")} onClick={(e) => { e.stopPropagation(); addChild(p); }}><Plus size={15} /></button>}
           </span>
         </div>
         {open && (
@@ -148,6 +149,12 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           {roots.map((p) => renderNode(p, 0))}
           <button type="button" className="cn-side-item muted" onClick={() => addChild(null)}><Plus size={15} /> <span>{t("Add a page")}</span></button>
         </div>
+        {mdRoots.map((r) => (
+          <div className="cn-side-sec" key={"md" + r.id}>
+            <div className="cn-side-label" title={t("Markdown files, read only")}>{r.title} <span className="cn-side-ro">.md</span></div>
+            {app.children(r.id).map((p) => renderNode(p, 0))}
+          </div>
+        ))}
       </div>
       <div className="cn-side-foot">
         <button type="button" className="cn-side-item" onClick={onTemplates}><LayoutTemplate size={16} /> <span>{t("Templates")}</span></button>
@@ -156,6 +163,12 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
       </div>
       {menu && (
         <Popover anchor={menu.el} onClose={() => setMenu(null)} width={240}>
+          {menu.p.readonly ? (
+            <MenuItem icon={<Link2 size={15} />} onClick={() => {
+              navigator.clipboard?.writeText(location.origin + pagePath(menu.p.id)).then(() => app.toast(t("Link copied")));
+              setMenu(null);
+            }}>{t("Copy link")}</MenuItem>
+          ) : <>
           <MenuItem icon={menu.p.favorite ? <StarOff size={15} /> : <Star size={15} />} onClick={async () => {
             await api.post(`/api/pages/${menu.p.id}`, { favorite: !menu.p.favorite });
             app.refresh(); setMenu(null);
@@ -171,6 +184,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           <MenuItem icon={<CornerUpRight size={15} />} onClick={() => { setMove(menu.p); setMenu(null); }}>{t("Move to")}</MenuItem>
           <MenuSep />
           <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { app.trashPage(menu.p.id); setMenu(null); }}>{t("Move to trash")}</MenuItem>
+          </>}
         </Popover>
       )}
       {move && <MoveDialog page={move} onClose={() => setMove(null)} />}

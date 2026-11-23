@@ -25,6 +25,8 @@ Other
   POST   /api/files      raw body + X-Carnet-Upload: 1 + X-Filename      -> {url}
   POST   /api/import     raw .zip / .md + X-Carnet-Upload: 1 + X-Filename -> stats
   GET    /api/export.zip?root=
+Markdown folders (CARNET_MD_FOLDERS) appear in the tree, pages, search and backlinks with ``readonly: true``;
+every write to one of their pages answers 403.
 """
 from __future__ import annotations
 
@@ -32,6 +34,7 @@ import json
 import re
 
 from . import __version__, markdown as md, transfer
+from .mdfolders import MdFolders
 from .store import Conflict, Invalid, NotFound, Store
 
 ID = r"([a-z0-9]{4,32})"
@@ -48,16 +51,17 @@ def dumps(obj) -> str:
 
 
 class API:
-    def __init__(self, store: Store, app=None):
+    def __init__(self, store: Store, app=None, folders: MdFolders | None = None):
         self.s = store
         self.app = app
+        self.md = folders if folders else None
         self.routes = []
         r = self.route
         r("GET", "/api/bootstrap", self.bootstrap)
         r("GET", "/api/pages", self.list_pages)
         r("POST", "/api/pages", lambda b, q: self.s.create(b))
         r("GET", f"/api/pages/{ID}", self.get_page)
-        r("GET", f"/api/pages/{ID}/markdown", lambda b, q, i: {"id": i, "markdown": transfer.page_markdown(self.s, i)})
+        r("GET", f"/api/pages/{ID}/markdown", lambda b, q, i: {"id": i, "markdown": self.page_markdown(i)})
         r("POST", f"/api/pages/{ID}", lambda b, q, i: self.s.update(i, b))
         r("POST", f"/api/pages/{ID}/move", lambda b, q, i: self.s.move(i, b.get("parent_id"), b.get("index")))
         r("POST", f"/api/pages/{ID}/duplicate", lambda b, q, i: self.s.duplicate(i))
@@ -68,7 +72,7 @@ class API:
         r("POST", r"/api/versions/(\d+)/restore", lambda b, q, v: self.s.restore_version(int(v)))
         r("GET", f"/api/databases/{ID}/rows", self.db_rows)
         r("POST", f"/api/databases/{ID}/rows", self.add_row)
-        r("GET", "/api/search", lambda b, q: {"results": self.s.search(q.get("q", ""), int(q.get("limit") or 30))})
+        r("GET", "/api/search", self.search)
         r("GET", "/api/trash", lambda b, q: {"results": self.s.trashed()})
         r("POST", "/api/trash/empty", self.empty_trash)
         r("POST", f"/api/templates/{ID}/use", lambda b, q, i: self.s.from_template(i, b.get("parent_id"), b.get("title")))
@@ -79,7 +83,14 @@ class API:
     def route(self, method, pattern, fn):
         self.routes.append((method, re.compile("^" + pattern + "$"), fn))
 
+    READONLY_WRITE = re.compile(r"^/api/(?:pages|databases|templates)/([a-z0-9]{4,32})(?:/|$)")
+
     def handle(self, method, path, query, body):
+        if method != "GET" and self.md:
+            mt = self.READONLY_WRITE.match(path)
+            pid = mt.group(1) if mt else None
+            if pid and self.md.has(pid) or (isinstance(body, dict) and self.md.has(str(body.get("parent_id") or ""))):
+                return 403, {"error": "read-only: this page is a Markdown file, edit the file itself"}
         for m, rx, fn in self.routes:
             if m != method:
                 continue
@@ -103,12 +114,15 @@ class API:
         return 404, {"error": "not found"}
 
     # ------------------------------------------------------------------ handlers
+    def tree(self):
+        return self.s.tree() + (self.md.tree() if self.md else [])
+
     def bootstrap(self, b, q):
         info = self.app.info() if self.app else {"version": __version__}
-        return {"info": info, "settings": self.s.settings(), "tree": self.s.tree()}
+        return {"info": info, "settings": self.s.settings(), "tree": self.tree()}
 
     def list_pages(self, b, q):
-        tree = self.s.tree()
+        tree = self.tree()
         if "parent_id" in q:
             tree = [p for p in tree if (p["parent_id"] or "") == q["parent_id"]]
         if q.get("q"):
@@ -120,8 +134,27 @@ class API:
 
     def get_page(self, b, q, pid):
         if q.get("format") in ("markdown", "md"):
-            return {"id": pid, "markdown": transfer.page_markdown(self.s, pid)}
+            return {"id": pid, "markdown": self.page_markdown(pid)}
+        if self.md and self.md.has(pid):
+            return self.md.page(pid, extra_backlinks=self._carnet_backlinks(pid))
         return self.s.page(pid)
+
+    def _carnet_backlinks(self, pid):
+        alive = self.s.alive_ids()
+        return [self.s.summary(r) for r in self.s.q(
+            "SELECT p.* FROM links l JOIN pages p ON p.id = l.src WHERE l.dst=?", (pid,)) if r["id"] in alive]
+
+    def page_markdown(self, pid):
+        if self.md and self.md.has(pid):
+            return self.md.markdown(pid)
+        return transfer.page_markdown(self.s, pid)
+
+    def search(self, b, q):
+        limit = int(q.get("limit") or 30)
+        res = self.s.search(q.get("q", ""), limit)
+        if self.md and q.get("q", "").strip():
+            res = (res + self.md.search(q["q"], limit))[:limit]     # Carnet pages first, then Markdown notes
+        return {"results": res}
 
     def db_rows(self, b, q, pid):
         page = self.s.page(pid)

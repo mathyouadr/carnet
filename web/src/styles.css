@@ -565,3 +565,10 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 }
 
 .cn-editor-error { margin: 24px 54px; padding: 14px 16px; border-radius: 8px; background: var(--cn-bg-2); color: var(--cn-fg-2); font-size: 14px; }
+
+/* Markdown folders (read only) */
+.cn-ro-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--cn-fg-2); padding: 4px 9px; border-radius: 6px; background: var(--cn-bg-2); white-space: nowrap; }
+.cn-ro-note { margin: 2px 0 14px; font-size: 13px; color: var(--cn-fg-3); }
+.cn-ro-note code { font-size: 12px; background: var(--cn-bg-2); padding: 1px 5px; border-radius: 4px; }
+.cn-side-ro { font-size: 10.5px; font-weight: 600; color: var(--cn-fg-3); border: 1px solid var(--cn-line-2); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+@media (max-width: 760px) { .cn-ro-badge span { display: none; } }

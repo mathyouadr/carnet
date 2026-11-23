@@ -67,3 +67,10 @@ A schema is `{title_name, properties: [{id, name, type, options?, database_id?, 
 | POST | `/api/import?parent_id=&databases=0` | raw `.zip` or `.md`, same headers → `{pages, databases, files, templates, root_id}` |
 | GET | `/api/export.zip?root=` | everything (or one subtree) as Markdown |
 | GET | `/healthz` | `{ok, version}` |
+
+## Markdown folders (read-only)
+
+With `CARNET_MD_FOLDERS=Name=/path`, the pages of a Markdown folder show up in `/api/bootstrap`, `/api/pages`,
+`/api/pages/{id}` (content converted on the fly, `readonly: true`, `source: {folder, path}`), `/api/search` and backlinks.
+Their ids start with `md`. `?format=markdown` returns the file itself. Any POST / DELETE on them, or creating a page
+inside them, answers **403**: edit the file instead.

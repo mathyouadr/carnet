@@ -82,6 +82,8 @@ export type Summary = {
   id: string; parent_id: string | null; kind: "page" | "database"; title: string; icon: string;
   position: number; favorite: number | null; is_template: number; inline: number; updated_at: string;
   created_at: string; is_row?: boolean;
+  /** page read from a Markdown folder (CARNET_MD_FOLDERS): shown, never edited */
+  readonly?: boolean; source?: { folder: string; path: string };
 };
 
 export type PropType = "text" | "number" | "select" | "multi_select" | "status" | "date" | "checkbox" | "url" |

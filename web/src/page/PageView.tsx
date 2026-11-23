@@ -146,6 +146,9 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
               ed?.focus();
             }
           }} />
+        {page.readonly && (
+          <div className="cn-ro-note">{t("Markdown file, read only")} · <code>{page.source?.folder}{page.source?.path ? " / " + page.source.path : ""}</code></div>
+        )}
         {isRow && <RowProperties page={page} editable={editable} onPage={setPage} />}
         {isDb ? (
           <DatabaseView dbId={page.id} initial={page} readOnly={!editable} />

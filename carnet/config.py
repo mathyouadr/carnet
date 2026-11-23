@@ -44,6 +44,7 @@ class Config:
     trust_proxy: bool = False           # read X-Forwarded-For for logs / rate limit
     allowed_hosts: tuple = ()           # extra host names accepted without a password (anti DNS rebinding)
     max_upload_mb: int = 50
+    md_folders: str = ""                # "Name=/path;Other=/path": Markdown folders shown read-only
 
     @property
     def db_path(self) -> Path:
@@ -76,4 +77,5 @@ class Config:
             secure_cookie=_bool(e("CARNET_SECURE_COOKIE")), trust_proxy=_bool(e("CARNET_TRUST_PROXY")),
             allowed_hosts=tuple(h.strip().lower() for h in e("CARNET_ALLOWED_HOSTS", "").split(",") if h.strip()),
             max_upload_mb=int(e("CARNET_MAX_UPLOAD_MB", "50") or 50),
+            md_folders=e("CARNET_MD_FOLDERS", ""),
         )

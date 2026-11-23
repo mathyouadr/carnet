@@ -126,6 +126,8 @@ python3 -m carnet import ~/Obsidian/MyVault           # or a .zip, or one .md fi
 docker compose run --rm -v ~/Obsidian/MyVault:/import:ro carnet import /import
 ```
 
+**Or keep your files where they are:** `CARNET_MD_FOLDERS=Vault=/path/to/vault` shows a folder of Markdown files in the sidebar, read-only, as pages: sub-folders become sub-pages, a folder note becomes the folder page, `[[links]]` resolve like in Obsidian, and backlinks and search include them. The files stay the source of truth, so you can keep editing them with Obsidian, a script or an AI agent. Changes appear within seconds. Writing to these pages through the app or the API is refused (403).
+
 **Leaving is just as easy:** *Settings → Export everything* downloads a zip of Markdown files (sub-pages in folders, attachments in `_files/`) that opens directly as an Obsidian vault. Any page: *⋯ → Export as Markdown / PDF*; any database: *view menu → Export as CSV*.
 
 ## 🔌 API
@@ -167,6 +169,7 @@ Environment variables (or a `.env` file next to where you start it):
 | `CARNET_ALLOWED_HOSTS` | | Host names accepted without a password (anti DNS-rebinding). |
 | `CARNET_SECURE_COOKIE` / `CARNET_TRUST_PROXY` | off | Behind HTTPS / a reverse proxy. |
 | `CARNET_MAX_UPLOAD_MB` | `50` | Largest upload. |
+| `CARNET_MD_FOLDERS` | | Markdown folders shown **read-only** next to your pages: `Name=/path;Other=/path`. |
 | `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). |
 
 ## ⌨️ Shortcuts

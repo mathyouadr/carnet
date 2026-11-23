@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Menu as MenuIcon, ChevronsRight, Star, MoreHorizontal, Pencil, BookOpen, Copy, CornerUpRight, Trash2, History,
+  Menu as MenuIcon, ChevronsRight, FileText, Star, MoreHorizontal, Pencil, BookOpen, Copy, CornerUpRight, Trash2, History,
   FileDown, Printer, Lock, Unlock, LayoutTemplate, MoveHorizontal, CaseSensitive, Link2, X, Maximize2, RotateCcw, Type,
 } from "lucide-react";
 import { api, BASE, BOOT, Page } from "../api";
@@ -70,18 +70,29 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
       {page && (
         <>
           <span className={`cn-save ${save}`}>{save === "saving" ? t("Saving…") : save === "error" ? t("Offline: changes kept, retrying…") : save === "saved" ? t("Saved") : !app.mobile ? `${t("Edited")} ${relTime(s?.updated_at || page.updated_at)}` : ""}</span>
+          {page.readonly ? (
+            <span className="cn-ro-badge" title={page.source?.path || ""}><FileText size={14} /> <span>{t("Markdown file · read only")}</span></span>
+          ) : (
           <div className="cn-mode" role="group">
             <button type="button" className={mode === "edit" ? "on" : ""} onClick={() => setMode("edit")} title="Ctrl+Shift+L"><Pencil size={14} /> <span>{t("Edit")}</span></button>
             <button type="button" className={mode === "read" ? "on" : ""} onClick={() => setMode("read")} title="Ctrl+Shift+L"><BookOpen size={14} /> <span>{t("Read")}</span></button>
           </div>
-          <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
+          )}
+          {!page.readonly && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
             onClick={async () => { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); app.refresh(); }}>
             <Star size={17} fill={s?.favorite ? "currentColor" : "none"} />
-          </button>
+          </button>}
           <button type="button" className="cn-icon-btn" onClick={(e) => setMenu(e.currentTarget)}><MoreHorizontal size={18} /></button>
         </>
       )}
-      {menu && page && (
+      {menu && page && page.readonly && (
+        <Popover anchor={menu} onClose={() => setMenu(null)} width={260} placement="bottom-end">
+          <MenuItem icon={<Link2 size={15} />} onClick={() => { navigator.clipboard?.writeText(location.origin + pagePath(page.id)).then(() => app.toast(t("Link copied"))); setMenu(null); }}>{t("Copy link")}</MenuItem>
+          <MenuItem icon={<FileDown size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${page.id}/export.md`; setMenu(null); }}>{t("Export as Markdown")}</MenuItem>
+          <MenuItem icon={<Printer size={15} />} onClick={() => { setMenu(null); setTimeout(() => print(), 300); }}>{t("Export as PDF")}</MenuItem>
+        </Popover>
+      )}
+      {menu && page && !page.readonly && (
         <Popover anchor={menu} onClose={() => setMenu(null)} width={260} placement="bottom-end">
           <MenuLabel>{t("Font")}</MenuLabel>
           <div className="cn-fonts">
@@ -214,7 +225,7 @@ function Main() {
         <Topbar mode={mode} setMode={setMode} page={page} onRestored={() => { setReload((x) => x + 1); window.dispatchEvent(new CustomEvent("carnet:changed", { detail: { id: pid } })); }} />
         <div id="cn-tb-main" className="cn-tb-slot" />
         <div className="cn-scroll">
-          {pid ? <PageView key={pid} pageId={pid} editable={mode === "edit" && !page?.in_trash} /> : <div className="cn-page-loading" />}
+          {pid ? <PageView key={pid} pageId={pid} editable={mode === "edit" && !page?.in_trash && !page?.readonly} /> : <div className="cn-page-loading" />}
           {page?.in_trash && (
             <div className="cn-trash-banner">{t("This page is in the trash.")}
               <button type="button" className="cn-btn sm" onClick={async () => { await api.post(`/api/pages/${page.id}/restore`); await app.refresh(); setReload((x) => x + 1); }}>{t("Restore")}</button>

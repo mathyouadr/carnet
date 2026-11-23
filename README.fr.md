@@ -36,6 +36,8 @@ Ouvrez **http://votre-serveur:8044**. Sans Docker : `(cd web && npm ci && npm ru
 
 **Paramètres → Importer** accepte un `.zip` (ou un `.md`) : coffre Obsidian zippé, export Notion « Markdown & CSV », dossier de fichiers Markdown. En ligne de commande : `python3 -m carnet import ~/Obsidian/MonCoffre`.
 
+Pour garder des fichiers `.md` là où ils sont : `CARNET_MD_FOLDERS=Coffre=/chemin/du/coffre` les affiche en **lecture seule** dans la barre latérale (sous-dossiers = sous-pages, liens `[[ ]]`, rétroliens, recherche). Les fichiers restent la référence.
+
 Pour partir : **Paramètres → Tout exporter** donne un zip de fichiers Markdown (sous-pages en dossiers, pièces jointes dans `_files/`).
 
 ## API
