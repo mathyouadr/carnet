@@ -143,5 +143,168 @@ class AICoreTests(unittest.TestCase):
             list(ai.iter_deltas([b'data: {"choices":[{"delta":{"content":"Bon"}}]}']))
 
 
+class FakeUpstream:
+    """OpenAI-compatible SSE server. `script` = list of content deltas, or an int HTTP status."""
+
+    def __init__(self):
+        import http.server
+        self.script = ["Bon", "jour"]
+        self.done = True
+        self.hang = 0.0
+        self.requests = []
+        self.closed = threading.Event()
+        up = self
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                up.requests.append({"headers": dict(self.headers), "body": json.loads(self.rfile.read(n))})
+                if isinstance(up.script, int):
+                    self.send_response(up.script)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                try:
+                    self.wfile.write(b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n')
+                    for d in up.script:
+                        self.wfile.write(b"data: " + json.dumps({"choices": [{"delta": {"content": d}}]}).encode() + b"\n\n")
+                        self.wfile.flush()
+                    if up.hang:
+                        import time
+                        end = time.time() + up.hang
+                        while time.time() < end:          # keep writing keepalives until the reader goes away
+                            time.sleep(0.1)
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                    if up.done:
+                        self.wfile.write(b"data: [DONE]\n\n")
+                except (BrokenPipeError, ConnectionResetError):
+                    up.closed.set()
+
+        from http.server import ThreadingHTTPServer
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.port = self.httpd.server_address[1]
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+    def stop(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+def sse_events(blob: bytes) -> list:
+    return [json.loads(line[5:]) for line in blob.decode().splitlines() if line.startswith("data:")]
+
+
+PARA = [{"type": "paragraph", "content": [{"type": "text", "text": "Salut", "styles": {}}]}]
+
+
+class AIHTTPTests(ServerCase):
+    def make_config(self):
+        self.up = FakeUpstream()
+        self.mdtmp = tempfile.TemporaryDirectory()
+        Path(self.mdtmp.name, "Note.md").write_text("# Note\n\nhello", encoding="utf-8")
+        return {"ai_url": f"http://127.0.0.1:{self.up.port}/v1", "ai_key": "sk-TOPSECRET",
+                "md_folders": f"N={self.mdtmp.name}"}
+
+    def tearDown(self):
+        super().tearDown()
+        self.up.stop()
+        self.mdtmp.cleanup()
+
+    def page_id(self):
+        _, _, b = self.raw("POST", "/api/pages", {"title": "P", "markdown": "Salut"})
+        return json.loads(b)["id"]
+
+    def ask(self, **kw):
+        body = {"page_id": self.page_id(), "command": "fix", "selection": PARA, "context": PARA}
+        body.update(kw)
+        st, hdrs, blob = self.raw("POST", "/api/ai", body)
+        self.all_bytes = getattr(self, "all_bytes", b"") + blob
+        return st, hdrs, blob
+
+    def test_stream_relay(self):
+        st, hdrs, blob = self.ask()
+        self.assertEqual(st, 200)
+        self.assertTrue(hdrs.get("Content-Type", "").startswith("text/event-stream"))
+        self.assertEqual(sse_events(blob), [{"selection_md": "Salut"}, {"delta": "Bon"}, {"delta": "jour"}, {"done": True}])
+        self.ask()
+        r1, r2 = self.up.requests
+        self.assertEqual(r1["headers"].get("Authorization"), "Bearer sk-TOPSECRET")
+        self.assertTrue(r1["body"]["stream"])
+        self.assertEqual(r1["body"]["model"], "hermes-agent")
+        self.assertTrue(r1["headers"].get("X-Hermes-Session-Id"))
+        self.assertNotEqual(r1["headers"]["X-Hermes-Session-Id"], r2["headers"]["X-Hermes-Session-Id"])
+
+    def test_secret_not_in_response(self):
+        self.ask()
+        self.up.script = 500
+        self.ask()
+        for blob in (self.all_bytes, self.raw("GET", "/api/bootstrap")[2]):
+            self.assertNotIn(b"TOPSECRET", blob)
+            self.assertNotIn(str(self.up.port).encode(), blob)
+
+    def test_upstream_errors(self):
+        self.up.script = 500
+        self.assertEqual(sse_events(self.ask()[2])[-1], {"error": "AI server error (500)"})
+        self.up.script, self.up.done = ["Bon"], False
+        ev = sse_events(self.ask()[2])
+        self.assertIn("error", ev[-1])
+        self.assertNotIn({"done": True}, ev)
+        self.up.stop()
+        self.assertEqual(sse_events(self.ask()[2])[-1], {"error": "AI server unreachable"})
+        self.up = FakeUpstream()                     # for tearDown
+
+    def test_guards(self):
+        pid = self.page_id()
+        body = {"page_id": pid, "command": "fix", "selection": PARA, "context": []}
+        self.assertEqual(self.raw("POST", "/api/ai", body, headers={"Origin": "http://evil.example"})[0], 403)
+        self.assertEqual(self.raw("POST", "/api/ai", {**body, "page_id": "zzzz9999"})[0], 404)
+        md_id = next(p["id"] for p in json.loads(self.raw("GET", "/api/bootstrap")[2])["tree"] if p.get("readonly"))
+        self.assertEqual(self.raw("POST", "/api/ai", {**body, "page_id": md_id})[0], 403)
+        self.assertEqual(self.raw("POST", "/api/ai", data=json.dumps(body).encode(),
+                                  headers={"Content-Type": "text/plain"})[0], 415)
+        big = {**body, "context": [{"type": "paragraph", "content": [{"type": "text", "text": "x" * 1100000}]}]}
+        self.assertEqual(self.raw("POST", "/api/ai", big)[0], 413)
+        self.assertEqual(self.raw("POST", "/api/ai", {**body, "command": "nope"})[0], 400)
+        self.assertEqual(len(self.up.requests), 0)
+
+    def test_client_disconnect(self):
+        import socket
+        self.up.script, self.up.hang = ["Bon"], 8
+        payload = json.dumps({"page_id": self.page_id(), "command": "fix", "selection": PARA, "context": []}).encode()
+        s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+        s.sendall(b"POST /api/ai HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n"
+                  b"Content-Length: " + str(len(payload)).encode() + b"\r\n\r\n" + payload)
+        got = b""
+        while b'"delta"' not in got:
+            got += s.recv(4096)
+        s.close()
+        self.assertTrue(self.up.closed.wait(4), "upstream still open after the client left")
+
+    def test_blocks_roundtrip(self):
+        self.raw("POST", "/api/pages", {"title": "Some page"})
+        st, _, b = self.raw("POST", "/api/ai/blocks", {"markdown": "> [!note] Hi\n\n$$x^2$$\n\n[[Some page]]"})
+        self.assertEqual(st, 200)
+        blocks = json.loads(b)["blocks"]
+        types = [x["type"] for x in blocks]
+        self.assertIn("callout", types)
+        self.assertIn("math", types)
+        self.assertIn("pageMention", json.dumps(blocks))
+
+
+class AIDisabledTests(ServerCase):
+    def test_disabled_404(self):
+        _, _, b = self.raw("POST", "/api/pages", {"title": "P"})
+        pid = json.loads(b)["id"]
+        self.assertEqual(self.raw("POST", "/api/ai", {"page_id": pid, "command": "fix", "selection": [], "context": []})[0], 404)
+        self.assertEqual(self.raw("POST", "/api/ai/blocks", {"markdown": "x"})[0], 404)
+
+
 if __name__ == "__main__":
     unittest.main()

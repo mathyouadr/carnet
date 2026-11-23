@@ -10,6 +10,8 @@ import json
 import logging
 import mimetypes
 import os
+import re
+import secrets
 import threading
 import time
 import urllib.parse
@@ -17,7 +19,8 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, transfer
+from . import __version__, ai, transfer
+from . import markdown as md
 from .api import API, dumps
 from .config import Config
 from .mdfolders import MdFolders, parse_spec
@@ -26,6 +29,8 @@ from .store import NotFound, Store
 log = logging.getLogger("carnet")
 STATIC = Path(__file__).parent / "static"
 MAX_JSON = 32 * 1024 * 1024
+MAX_AI_BODY = 1024 * 1024
+MAX_AI_MARKDOWN = 200_000
 SESSION_DAYS = 90
 SAFE_INLINE = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "application/pdf",
                "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav", "audio/mp4",
@@ -281,6 +286,12 @@ class Handler(BaseHTTPRequestHandler):
                 upload = path in ("/api/files", "/api/import") and self.headers.get("X-Carnet-Upload") == "1"
                 if not upload and ctype in ("application/x-www-form-urlencoded", "multipart/form-data", "text/plain"):
                     return self.json(415, {"error": "JSON required"})
+            if path in ("/api/ai", "/api/ai/blocks"):
+                if not self.app.c.ai_enabled:
+                    return self.json(404, {"error": "not found"})
+                if method != "POST":
+                    return self.json(405, {"error": "method not allowed"})
+                return self.ai_stream() if path == "/api/ai" else self.ai_blocks()
             if path == "/api/files" and method == "POST":
                 return self.upload()
             if path == "/api/import" and method == "POST":
@@ -319,6 +330,115 @@ class Handler(BaseHTTPRequestHandler):
         if method != "GET":
             return self.json(405, {"error": "method not allowed"})
         return self.page(logged_in=bool(who))
+
+    # ------------------------------------------------------------------ AI assistant
+    def _ai_body(self):
+        """-> dict, or None once an error response was sent."""
+        try:
+            raw = self.read_raw(MAX_AI_BODY)
+        except ValueError as e:
+            self.json(413 if "large" in str(e) else 400, {"error": f"request refused ({e})"})
+            return None
+        try:
+            data = json.loads(raw or b"{}")
+            if not isinstance(data, dict):
+                raise ValueError("JSON object expected")
+            return data
+        except (ValueError, UnicodeDecodeError) as e:
+            self.json(400, {"error": f"invalid body ({e})"})
+            return None
+
+    def _related(self, query: str, exclude: str) -> list[dict]:
+        """Up to ai.MAX_HITS notes sharing the most words with `query` (one search per significant word)."""
+        words = [w for w in dict.fromkeys(re.findall(r"\w{4,}", query.lower()))][:8]
+        score: dict[str, list] = {}
+        for w in words:
+            hits = self.app.store.search(w, 5) + (self.app.folders.search(w, 5) if self.app.folders else [])
+            for h in hits:
+                if h["id"] != exclude:
+                    score.setdefault(h["id"], [0, h])[0] += 1
+        best = sorted(score.values(), key=lambda x: -x[0])[:ai.MAX_HITS]
+        out = []
+        for _, h in best:
+            if self.app.folders.has(h["id"]):
+                text = self.app.folders.text(h["id"])
+            else:
+                r = self.app.store.q1("SELECT text FROM pages WHERE id=?", (h["id"],))
+                text = r["text"] if r else ""
+            out.append({"id": h["id"], "title": h.get("title") or "", "snippet": (text or "")[:ai.HIT_CHARS]})
+        return out
+
+    def ai_stream(self):
+        body = self._ai_body()
+        if body is None:
+            return
+        pid = str(body.get("page_id") or "")
+        if self.app.folders.has(pid):
+            return self.json(403, {"error": "read-only page"})
+        try:
+            page = self.app.store.page(pid, with_rows=False)
+        except NotFound:
+            return self.json(404, {"error": "not found"})
+        if pid not in self.app.store.alive_ids():
+            return self.json(403, {"error": "page in the trash"})
+        command = str(body.get("command") or "")
+        prompt = str(body.get("prompt") or "")
+        titles = {r["id"]: r["title"] or "Untitled" for r in self.app.store.q("SELECT id, title FROM pages")}
+        try:
+            sel = body.get("selection") or []
+            ctx = body.get("context") or []
+            if not isinstance(sel, list) or not isinstance(ctx, list):
+                raise ValueError("selection and context must be lists of blocks")
+            selection_md = md.to_markdown(sel, title_of=titles.get).strip()
+            context_md = md.to_markdown(ctx, title_of=titles.get).strip()
+            hits = self._related(prompt or selection_md[:300], pid) if command in ("custom", "continue") else []
+            history = body.get("history") or []
+            messages = ai.build_messages(command=command, prompt=prompt, title=page.get("title") or "",
+                                         selection_md=selection_md, context_md=context_md, hits=hits,
+                                         history=history if isinstance(history, list) else [],
+                                         extra_system=self.app.c.ai_system)
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            return self.json(400, {"error": f"invalid request ({e})"})
+
+        self.close_connection = True
+        self.send_response(200)
+        for k, v in (("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-store"),
+                     ("X-Accel-Buffering", "no"), ("X-Content-Type-Options", "nosniff"), ("Connection", "close")):
+            self.send_header(k, v)
+        self.end_headers()
+
+        def event(obj):
+            self.wfile.write(b"data: " + dumps(obj).encode() + b"\n\n")
+            self.wfile.flush()
+
+        stream = ai.stream_chat(self.app.c, messages, "carnet-" + secrets.token_hex(8))
+        try:
+            event({"selection_md": ai.clip_selection(selection_md)})
+            try:
+                for delta in stream:
+                    if delta:
+                        event({"delta": delta})
+                    else:                                   # keepalive: a write is how a gone client shows up
+                        self.wfile.write(b": \n\n")
+                        self.wfile.flush()
+            except ai.UpstreamError as e:
+                return event({"error": str(e)})
+            event({"done": True})
+        except (BrokenPipeError, ConnectionResetError):
+            log.info("AI request cancelled by the client")
+        finally:
+            stream.close()
+
+    def ai_blocks(self):
+        body = self._ai_body()
+        if body is None:
+            return
+        text = body.get("markdown")
+        if not isinstance(text, str):
+            return self.json(400, {"error": "markdown expected"})
+        if len(text) > MAX_AI_MARKDOWN:
+            return self.json(413, {"error": "too large"})
+        return self.json(200, {"blocks": md.to_blocks(text, resolve=self.app.store.resolve_title)})
 
     # ------------------------------------------------------------------ uploads & files
     def upload(self):

@@ -74,3 +74,22 @@ With `CARNET_MD_FOLDERS=Name=/path`, the pages of a Markdown folder show up in `
 `/api/pages/{id}` (content converted on the fly, `readonly: true`, `source: {folder, path}`), `/api/search` and backlinks.
 Their ids start with `md`. `?format=markdown` returns the file itself. Any POST / DELETE on them, or creating a page
 inside them, answers **403**: edit the file instead.
+
+## AI assistant
+
+Only when `CARNET_AI_URL` is set (otherwise **404**). `/api/bootstrap` → `info.ai = {enabled, name}`; the endpoint URL
+and key are never sent to the browser.
+
+| Method | Path | Body → result |
+|---|---|---|
+| POST | `/api/ai` | `{page_id, command, prompt?, selection: Block[], context: Block[], history?: [{role, content}]}` → `text/event-stream` |
+| POST | `/api/ai/blocks` | `{markdown}` → `{blocks}` (same parser as `markdown` on `/api/pages`) |
+
+`command`: `improve`, `fix`, `shorter`, `longer`, `simplify`, `explain`, `translate_fr`, `translate_en`, `summarize`
+(about the selection), `continue`, `summarize_page`, `action_items`, `custom` (needs `prompt`). For `custom` and
+`continue`, a few related notes found by search are added to the prompt.
+
+Events, in order: `data: {"selection_md": "..."}` (the selection as the AI saw it, for diffs), `data: {"delta": "..."}`
+repeated, then `data: {"done": true}` **or** `data: {"error": "..."}`. Lines starting with `:` are keepalives.
+Errors before the stream starts are plain JSON: 400 (bad command / body), 403 (Markdown-folder or trashed page,
+cross-site), 404 (unknown page), 413 (body over 1 MB).

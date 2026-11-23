@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Iterable, Iterator
+from typing import Generator, Iterable, Iterator
 
 COMMANDS: dict[str, str] = {
     "improve": "Improve the writing of the selected text: clearer, better flow, same meaning.",
@@ -93,12 +93,15 @@ def build_messages(*, command: str, prompt: str, title: str, selection_md: str, 
     return msgs
 
 
-def iter_deltas(lines: Iterable[bytes]) -> Iterator[str]:
-    """Text deltas of an OpenAI-style SSE stream. Other events (tool progress, reasoning, keepalives) are dropped.
+def iter_deltas(lines: Iterable[bytes], heartbeats: bool = False) -> Iterator[str]:
+    """Text deltas of an OpenAI-style SSE stream. Other events (tool progress, reasoning, keepalives) are dropped,
+    or yielded as "" with `heartbeats` (so the relay writes something and notices a client that left).
     A stream that ends without ``[DONE]`` is an error: the answer may be cut."""
     for raw in lines:
         line = raw.decode("utf-8", "replace").strip() if isinstance(raw, bytes) else str(raw).strip()
         if not line.startswith("data:"):
+            if heartbeats and line:
+                yield ""
             continue
         data = line[5:].strip()
         if data == "[DONE]":
@@ -117,10 +120,13 @@ def iter_deltas(lines: Iterable[bytes]) -> Iterator[str]:
             text = ((ch or {}).get("delta") or {}).get("content")
             if isinstance(text, str) and text:
                 yield text
+            elif heartbeats:
+                yield ""
     raise UpstreamError("AI answer interrupted")
 
 
-def stream_chat(cfg, messages: list[dict], session_id: str) -> Iterator[str]:
+def stream_chat(cfg, messages: list[dict], session_id: str) -> Generator[str, None, None]:
+    """Text deltas from the endpoint; "" = keepalive (no text, but the relay should write to detect a gone client)."""
     body = json.dumps({"model": cfg.ai_model, "messages": messages, "stream": True}).encode()
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream", "X-Hermes-Session-Id": session_id}
     if cfg.ai_key:
@@ -135,7 +141,7 @@ def stream_chat(cfg, messages: list[dict], session_id: str) -> Iterator[str]:
         raise UpstreamError("AI server unreachable") from None
     try:
         try:
-            yield from iter_deltas(resp)
+            yield from iter_deltas(resp, heartbeats=True)
         except (OSError, ValueError):
             raise UpstreamError("AI answer interrupted") from None
     finally:
