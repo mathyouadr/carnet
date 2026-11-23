@@ -120,7 +120,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
       {inline && (
         <div className="cn-db-title">
           <span className="ic">{db.icon || "🗂️"}</span>
-          {locked ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : readOnly ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : (
+          {locked ? <a onClick={() => app.navigate(dbId)}>{locked.name}</a> : readOnly ? <a onClick={() => app.navigate(dbId)}>{db.title || t("Untitled")}</a> : (
             <input className="cn-db-title-in" defaultValue={db.title} placeholder={t("Untitled")} key={db.id}
               onBlur={(e) => { if (e.target.value !== db.title) persist({ title: e.target.value }); }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
@@ -130,7 +130,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
       )}
       <div className="cn-db-bar">
         <div className="cn-views">
-          {tabs.map((v) => (
+          {(locked && readOnly ? [] : tabs).map((v) => (
             <button type="button" key={v.id} className={`cn-view-tab ${v.id === view.id ? "on" : ""}`}
               onClick={(e) => (v.id === view.id && !readOnly ? openPop("view")(e) : pick(v.id))}>
               {viewIcon(v.type)}<span>{v.name}</span>{v.id === view.id && !readOnly && <ChevronDown size={12} />}

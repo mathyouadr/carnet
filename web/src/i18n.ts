@@ -39,6 +39,7 @@ const FR: Record<string, string> = {
   "Audio": "Audio",
   "Equation": "Formule",
   "Block": "Bloc",
+  "Nothing here yet": "Rien pour l'instant",
   "Start writing, or press / for commands": "Écrivez, ou tapez / pour les commandes",
   "Close": "Fermer", "Cancel": "Annuler", "OK": "OK", "Rename": "Renommer", "Open": "Ouvrir", "Open as page": "Ouvrir en pleine page",
   "Move here": "Déplacer ici", "Top level": "Racine", "Choose where to move": "Où déplacer la page ?",

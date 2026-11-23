@@ -268,6 +268,7 @@ export function GalleryView({ rows, schema, view, readOnly, onAdd, open }: ViewP
   const [closed, setClosed] = useState<string[]>(view.collapsed || []);
   const grid = (list: Row[], preset: Record<string, any>) => (
     <div className={`cn-gallery ${view.card_size || "medium"}`}>
+      {!list.length && readOnly && <div className="cn-muted cn-gal-empty">{t("Nothing here yet")}</div>}
       {list.map((r) => <Card key={r.id} row={r} schema={schema} view={view} open={() => open(r.id)} cover />)}
       {!readOnly && <button type="button" className="cn-card add" onClick={() => onAdd({ ...presetFromFilters(view, schema), ...preset }, true)}><Plus size={16} /> {t("New")}</button>}
     </div>

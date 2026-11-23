@@ -581,3 +581,4 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-gal-group > .cn-gallery { margin-bottom: 10px; }
 .cn-gallery .cn-card.add { min-height: 0; align-self: start; padding: 14px; justify-content: center; }
 .cn-card-prop { display: flex; align-items: center; gap: 4px; }
+.cn-gal-empty { padding: 10px 2px; font-size: 14px; }
