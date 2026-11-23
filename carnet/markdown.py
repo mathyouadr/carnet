@@ -139,7 +139,8 @@ def parse_inline(text: str, resolve: Resolver = None, styles: dict | None = None
         pos = m.end()
         g = m.groupdict()
         if g["code"]:
-            add_text(g["codetext"].strip(" ") if g["codetext"].strip(" ") else g["codetext"], {**styles, "code": True})
+            # BlockNote's code mark excludes every other mark (bold + code would break the page)
+            add_text(g["codetext"].strip(" ") if g["codetext"].strip(" ") else g["codetext"], {"code": True})
         elif g["math"]:
             out.append({"type": "inlineMath", "props": {"latex": g["mathtext"]}})
         elif g["wiki"]:
@@ -206,16 +207,18 @@ def _plain(inline) -> str:
     if isinstance(inline, str):
         return inline
     out = []
-    for it in inline or []:
+    for it in inline if isinstance(inline, list) else []:
+        if not isinstance(it, dict):
+            continue
         t = it.get("type")
         if t == "text":
-            out.append(it.get("text", ""))
+            out.append(str(it.get("text", "")))
         elif t == "link":
             out.append(_plain(it.get("content")))
         elif t == "pageMention":
-            out.append((it.get("props") or {}).get("title", ""))
+            out.append(str((it.get("props") or {}).get("title", "")))
         elif t == "inlineMath":
-            out.append((it.get("props") or {}).get("latex", ""))
+            out.append(str((it.get("props") or {}).get("latex", "")))
     return "".join(out)
 
 
@@ -554,11 +557,16 @@ def _blocks_md(blocks, depth, title_of, url_of) -> str:
     parts: list[str] = []
     prev = None
     num = 0
-    for b in blocks:
+    for b in blocks if isinstance(blocks, list) else []:
+        if not isinstance(b, dict):
+            continue
         t = b.get("type")
-        num = num + 1 if t == "numberedListItem" and prev == "numberedListItem" else \
-            (int((b.get("props") or {}).get("start") or 1) if t == "numberedListItem" else 0)
-        s = _block_md(b, depth, num, title_of, url_of)
+        try:
+            num = num + 1 if t == "numberedListItem" and prev == "numberedListItem" else \
+                (int((b.get("props") or {}).get("start") or 1) if t == "numberedListItem" else 0)
+            s = _block_md(b, depth, num, title_of, url_of)
+        except (AttributeError, TypeError, ValueError, KeyError):
+            s = None                                  # a malformed block (API write) is skipped, never a 500
         if s is None:
             continue
         listy = t in ("bulletListItem", "numberedListItem", "checkListItem")
@@ -736,14 +744,16 @@ def to_text(blocks) -> str:
                 if s.strip():
                     out.append(s)
             elif isinstance(c, dict):
-                for r in c.get("rows", []):
+                rows = c.get("rows")
+                for r in rows if isinstance(rows, list) else []:
+                    cells = r.get("cells") if isinstance(r, dict) else None
                     out.append(" | ".join(_plain(cell.get("content") if isinstance(cell, dict) else cell)
-                                          for cell in r.get("cells", [])))
+                                          for cell in (cells if isinstance(cells, list) else [])))
             if b.get("type") == "math" and p.get("latex"):
-                out.append(p["latex"])
+                out.append(str(p["latex"]))
             if b.get("type") in ("image", "file", "video", "audio") and (p.get("caption") or p.get("name")):
-                out.append(p.get("caption") or p.get("name"))
-            walk(b.get("children"))
+                out.append(str(p.get("caption") or p.get("name")))
+            walk(b.get("children") if isinstance(b.get("children"), list) else None)
 
     walk(blocks)
     return "\n".join(out).strip()

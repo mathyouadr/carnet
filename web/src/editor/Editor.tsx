@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import { combineByGroup, filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
 import { fr as bnFr, en as bnEn } from "@blocknote/core/locales";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -16,24 +16,76 @@ import { useTheme } from "../app/theme";
 
 const KNOWN = new Set(Object.keys((schema as any).blockSchema));
 
+/** BlockNote's `code` mark excludes every other mark: bold + code (common in Markdown) would make the
+ *  whole document fail to load. `strict` (second try, after a crash) keeps plain text only. */
+function cleanInline(content: any, strict: boolean): any {
+  if (!Array.isArray(content)) return content;
+  return content.filter(Boolean).map((n: any) => {
+    if (n.type === "text") {
+      const st = n.styles || {};
+      return { ...n, text: String(n.text ?? ""), styles: strict ? {} : st.code ? { code: true } : st };
+    }
+    if (n.type === "link") return strict ? { type: "text", text: (n.content || []).map((c: any) => c.text || "").join(""), styles: {} }
+      : { ...n, content: cleanInline(n.content, strict) };
+    return n;
+  });
+}
+
+function cleanContent(b: any, strict: boolean): any {
+  const c = b.content;
+  if (Array.isArray(c)) return cleanInline(c, strict);
+  if (c && c.type === "tableContent" && Array.isArray(c.rows)) {
+    if (strict) return undefined;
+    return { ...c, rows: c.rows.map((r: any) => ({ ...r, cells: (r.cells || []).map((cell: any) =>
+      Array.isArray(cell) ? cleanInline(cell, strict) : cell && typeof cell === "object" ? { ...cell, content: cleanInline(cell.content, strict) } : cell) })) };
+  }
+  return c;
+}
+
 /** Drop what the schema doesn't know (old imports, newer versions) instead of crashing the editor. */
-function sanitize(blocks: any[]): any[] {
+function sanitize(blocks: any[], strict = false): any[] {
   const out: any[] = [];
   for (const b of blocks || []) {
     if (!b || typeof b !== "object") continue;
-    if (!KNOWN.has(b.type)) {
+    if (!KNOWN.has(b.type) || (strict && b.type === "table")) {
       const text = Array.isArray(b.content) ? b.content : [];
-      out.push({ type: "paragraph", content: text, children: sanitize(b.children || []) });
+      out.push({ type: "paragraph", content: cleanInline(text, true), children: sanitize(b.children || [], strict) });
       continue;
     }
-    out.push({ ...b, children: sanitize(b.children || []) });
+    const nb: any = { ...b, children: sanitize(b.children || [], strict) };
+    const c = cleanContent(b, strict);
+    if (c === undefined) delete nb.content; else nb.content = c;
+    out.push(nb);
   }
   return out;
 }
 
-export function Editor({ page, editable, onChange, focusOnLoad, toolbarSlot }: {
-  page: Page; editable: boolean; onChange: (blocks: any[]) => void; focusOnLoad?: boolean; toolbarSlot?: string;
-}) {
+type EditorProps = {
+  page: Page; editable: boolean; onChange: (blocks: any[]) => void; focusOnLoad?: boolean; toolbarSlot?: string; strict?: boolean;
+};
+
+/** A page that cannot be loaded must never blank the whole app: retry in plain-text mode, then show a message. */
+class EditorBoundary extends Component<EditorProps, { level: number; key: string }> {
+  state = { level: 0, key: this.props.page.id };
+  static getDerivedStateFromProps(p: EditorProps, s: { level: number; key: string }) {
+    return p.page.id !== s.key ? { level: 0, key: p.page.id } : null;
+  }
+  componentDidCatch(err: unknown) {
+    console.error("Carnet: page content could not be loaded", err);
+    this.setState(s => ({ level: s.level + 1 }));
+  }
+  render() {
+    if (this.state.level >= 2)
+      return <div className="cn-editor-error">{t("This page could not be displayed. Its content is kept: export it as Markdown from the ⋯ menu.")}</div>;
+    return <EditorInner key={this.state.level} {...this.props} strict={this.state.level === 1} />;
+  }
+}
+
+export function Editor(props: EditorProps) {
+  return <EditorBoundary {...props} />;
+}
+
+function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, strict }: EditorProps) {
   const app = useApp();
   const theme = useTheme();
   const host = useRef<HTMLDivElement>(null);
@@ -46,13 +98,13 @@ export function Editor({ page, editable, onChange, focusOnLoad, toolbarSlot }: {
       multi_column: LANG === "fr" ? mcLocales.fr : mcLocales.en,
       placeholders: { ...dict.placeholders, default: t("Start writing, or press / for commands"), emptyDocument: t("Start writing, or press / for commands") },
     } as any,
-    initialContent: page.content?.length ? sanitize(page.content) : undefined,
+    initialContent: page.content?.length ? sanitize(page.content, strict) : undefined,
     uploadFile: async (file: File) => (await api.upload(file, file.name, page.id)).url,
     resolveFileUrl: async (url: string) => fileUrl(url),
     extensions: [syntaxHighlighter],
     tables: { splitCells: true, cellBackgroundColor: true, cellTextColor: true, headers: true },
     animations: false,
-  } as any, [page.id]);
+  } as any, [page.id, strict]);
 
   useEffect(() => {
     if (focusOnLoad && editable) setTimeout(() => editor.focus(), 50);

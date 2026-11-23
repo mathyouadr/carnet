@@ -32,6 +32,7 @@ const FR: Record<string, string> = {
   "Current version": "Version actuelle", "Version restored": "Version restaurée",
   "Use template": "Utiliser le modèle", "New from template": "Nouveau depuis un modèle", "Empty page": "Page vide",
   "No templates yet: open a page's ⋯ menu > Turn into template.": "Aucun modèle : menu ⋯ d'une page > Transformer en modèle.",
+  "This page could not be displayed. Its content is kept: export it as Markdown from the ⋯ menu.": "Impossible d'afficher cette page. Son contenu est conservé : exportez-la en Markdown depuis le menu ⋯.",
   "Start writing, or press / for commands": "Écrivez, ou tapez / pour les commandes",
   "Close": "Fermer", "Cancel": "Annuler", "OK": "OK", "Rename": "Renommer", "Open": "Ouvrir", "Open as page": "Ouvrir en pleine page",
   "Move here": "Déplacer ici", "Top level": "Racine", "Choose where to move": "Où déplacer la page ?",

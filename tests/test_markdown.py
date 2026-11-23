@@ -100,5 +100,27 @@ $$
         self.assertIn("Bonjour X", md.to_text(blocks))
 
 
+class CodeMarkTest(unittest.TestCase):
+    def test_code_drops_other_styles(self):
+        # BlockNote refuses bold + code on the same text: the whole page would fail to load
+        b = md.to_blocks("Use **`secret`** not `password`.")[0]
+        styles = [n["styles"] for n in b["content"] if n["text"] in ("secret", "password")]
+        self.assertEqual(styles, [{"code": True}, {"code": True}])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class MalformedBlocksTest(unittest.TestCase):
+    def test_garbage_never_raises(self):
+        # content written through the API may be anything: search indexing and export must not crash
+        junk = [None, "x", 1, [], {}, {"rows": "o"}, {"type": "tableContent", "rows": [1, {"cells": "z"}, {"cells": [1, None]}]},
+                [{"type": "text"}], [{"type": "link", "content": "q"}], [3, "a"]]
+        for t in ("paragraph", "table", "numberedListItem", "math", "image", "codeBlock", "callout"):
+            for c in junk:
+                for props in (None, {"start": "a"}, {"latex": 3}):
+                    blocks = [{"type": t, "content": c, "props": props, "children": "c"}, "junk", None]
+                    md.to_text(blocks)
+                    md.to_markdown(blocks)
+                    md.page_refs(blocks)

@@ -563,3 +563,5 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
   body { background: #fff; color: #000; }
   .cn-cover { height: 160px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+.cn-editor-error { margin: 24px 54px; padding: 14px 16px; border-radius: 8px; background: var(--cn-bg-2); color: var(--cn-fg-2); font-size: 14px; }
