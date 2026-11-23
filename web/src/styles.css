@@ -582,3 +582,10 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-gallery .cn-card.add { min-height: 0; align-self: start; padding: 14px; justify-content: center; }
 .cn-card-prop { display: flex; align-items: center; gap: 4px; }
 .cn-gal-empty { padding: 10px 2px; font-size: 14px; }
+
+/* no blue frame/overlay on a selected block (database, page link, image…) or mention */
+.bn-block-content.ProseMirror-selectednode > ::after,
+.ProseMirror-selectednode > .bn-block-content > ::after,
+.bn-block-content .ProseMirror-selectednode::after,
+.bn-inline-content .ProseMirror-selectednode::after { display: none !important; }
+.ProseMirror-selectednode, .ProseMirror-selectednode * { outline: none !important; }
