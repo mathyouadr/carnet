@@ -95,6 +95,17 @@ const FR: Record<string, string> = {
   "Sum": "Somme", "Average": "Moyenne", "Checked": "Cochées", "Percent checked": "% cochées", "Filled": "Remplies",
   "Upload failed": "Échec de l'envoi", "Copied": "Copié", "Print / PDF": "Imprimer / PDF", "Created": "Créée",
   "Quick note": "Note rapide",
+  "AI": "IA", "Ask AI": "Demander à l'IA", "Ask {name}": "Demander à {name}", "Ask": "Demander",
+  "Ask {name} anything…": "Demandez n'importe quoi à {name}…", "{name} is thinking…": "{name} réfléchit…",
+  "Tell {name} what to change…": "Dites à {name} quoi changer…", "Press Enter to ask": "Entrée pour envoyer",
+  "Send": "Envoyer", "Stop": "Arrêter", "Replace": "Remplacer", "Insert below": "Insérer dessous",
+  "Retry": "Réessayer", "Discard": "Annuler", "Empty answer": "Réponse vide",
+  "The text changed in the meantime": "Le texte a changé entre-temps",
+  "Improve writing": "Améliorer l'écriture", "Fix spelling & grammar": "Corriger l'orthographe et la grammaire",
+  "Make shorter": "Raccourcir", "Make longer": "Rallonger", "Simplify": "Simplifier", "Explain": "Expliquer",
+  "Translate to French": "Traduire en français", "Translate to English": "Traduire en anglais", "Summarize": "Résumer",
+  "Continue writing": "Continuer d'écrire", "Summarize the page": "Résumer la page",
+  "Action items from the page": "Tâches à faire de la page",
 };
 
 const lang = (() => {
