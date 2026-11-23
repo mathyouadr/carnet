@@ -75,5 +75,73 @@ class AISecretsTests(ServerCase):
             self.assertNotIn(b"TOPSECRET", blob)
 
 
+class AICoreTests(unittest.TestCase):
+    def build(self, **kw):
+        from carnet import ai
+        args = dict(command="fix", prompt="", title="Ma page", selection_md="Salut le mond", context_md="",
+                    hits=[], history=[], extra_system="")
+        args.update(kw)
+        return ai.build_messages(**args)
+
+    def test_build_messages_shape(self):
+        from carnet import ai
+        hist = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]
+        msgs = self.build(history=hist, extra_system="Tu es Hermes.")
+        self.assertEqual(msgs[0]["role"], "system")
+        sysmsg = msgs[0]["content"]
+        for needle in ("Markdown", "no preamble", "same language", "Tu es Hermes."):
+            self.assertIn(needle, sysmsg)
+        self.assertEqual(msgs[1:3], hist)
+        last = msgs[-1]
+        self.assertEqual(last["role"], "user")
+        for needle in (ai.COMMANDS["fix"], "Salut le mond", "Ma page"):
+            self.assertIn(needle, last["content"])
+
+    def test_unknown_command_and_custom(self):
+        with self.assertRaises(ValueError):
+            self.build(command="nope")
+        with self.assertRaises(ValueError):
+            self.build(command="custom", prompt="")
+        self.assertIn("Fais un plan", self.build(command="custom", prompt="Fais un plan")[-1]["content"])
+
+    def test_hits_capped(self):
+        hits = [{"id": f"p{i}", "title": f"Hit{i}", "snippet": chr(65 + i) * 2000} for i in range(8)]
+        last = self.build(command="custom", prompt="x", hits=hits)[-1]["content"]
+        self.assertIn("Hit4", last)
+        self.assertNotIn("Hit5", last)
+        self.assertNotIn("A" * 601, last)
+        self.assertIn("A" * 600, last)
+
+    def test_clip_context(self):
+        from carnet import ai
+        sel = "<<SELECTION>>"
+        ctx = "x" * 25000 + sel + "y" * 25000
+        out = ai.clip_context(ctx, sel)
+        self.assertLessEqual(len(out), 12000)
+        self.assertIn(sel, out)
+        self.assertEqual(ai.clip_context("short", "s"), "short")
+        self.assertEqual(len(ai.clip_selection("z" * 30000)), 20000)
+
+    def test_iter_deltas(self):
+        from carnet import ai
+        lines = [b'data: {"choices":[{"delta":{"role":"assistant"}}]}', b'', b'event: hermes.tool.progress',
+                 b'data: {"tool":"x"}', b'', b'data: {"choices":[{"delta":{"content":"Bon"}}]}', b': keepalive',
+                 b'data: {"choices":[{"delta":{"reasoning_content":"hmm"}}]}',
+                 b'data: {"choices":[{"delta":{"content":"jour"}}]}', b'data: [DONE]',
+                 b'data: {"choices":[{"delta":{"content":"after"}}]}']
+        self.assertEqual(list(ai.iter_deltas(lines)), ["Bon", "jour"])
+
+    def test_iter_deltas_error(self):
+        from carnet import ai
+        with self.assertRaises(ai.UpstreamError) as cm:
+            list(ai.iter_deltas([b'data: {"error":{"message":"boom"}}']))
+        self.assertIn("boom", str(cm.exception))
+
+    def test_iter_deltas_needs_done(self):
+        from carnet import ai
+        with self.assertRaises(ai.UpstreamError):
+            list(ai.iter_deltas([b'data: {"choices":[{"delta":{"content":"Bon"}}]}']))
+
+
 if __name__ == "__main__":
     unittest.main()
