@@ -767,3 +767,6 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-graph-chk { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--cn-fg-2); }
 .cn-graph-cv { flex: 1; width: 100%; min-height: 0; touch-action: none; cursor: grab; }
 .cn-graph-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--cn-fg-3); pointer-events: none; }
+.cn-seg { display: inline-flex; border: 1px solid var(--cn-line-2); border-radius: 7px; overflow: hidden; }
+.cn-seg button { border: 0; background: transparent; color: var(--cn-fg-2); padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.cn-seg button.on { background: var(--cn-bg-3); color: var(--cn-fg); font-weight: 600; }
