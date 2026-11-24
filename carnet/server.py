@@ -41,6 +41,26 @@ SAFE_INLINE = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif
                "audio/flac", "audio/x-wav", "text/plain"}
 
 
+def parse_range(header: str, size: int):
+    """One byte range of a Range header: (start, end) inclusive, False when it can't be satisfied (416), or None
+    to send the whole file (no header, several ranges, or a syntax we don't understand)."""
+    if not header.startswith("bytes=") or "," in header:
+        return None
+    a, dash, b = header[6:].strip().partition("-")
+    if not dash or (a and not a.isdigit()) or (b and not b.isdigit()) or (not a and not b):
+        return None
+    if size == 0:
+        return False
+    if not a:                                            # the last N bytes
+        n = int(b)
+        return (max(0, size - n), size - 1) if n > 0 else False
+    start = int(a)
+    if start >= size:
+        return False
+    end = min(int(b), size - 1) if b else size - 1
+    return (start, end) if end >= start else None
+
+
 def _no_constant(name):
     """json.loads hook: NaN / Infinity are not JSON, so they are refused instead of becoming Python floats."""
     raise ValueError(f"{name} is not allowed in JSON")
@@ -585,11 +605,43 @@ class Handler(BaseHTTPRequestHandler):
         mime = f["mime"] or "application/octet-stream"
         inline = mime in SAFE_INLINE
         disp = ("inline" if inline else "attachment") + "; filename*=UTF-8''" + urllib.parse.quote(f["name"])
-        # uploaded HTML/SVG never runs as this site: served as a download inside a sandbox
-        self.send(200, p.read_bytes(), ctype=mime if inline else "application/octet-stream",
-                  cache="private, max-age=31536000, immutable",
-                  headers={"Content-Disposition": disp, "Content-Security-Policy": "sandbox; default-src 'none'; "
-                           "img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'"})
+        size = p.stat().st_size
+        headers = {"Content-Disposition": disp, "Accept-Ranges": "bytes",
+                   # uploaded HTML/SVG never runs as this site: served as a download inside a sandbox
+                   "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; "
+                                              "style-src 'unsafe-inline'"}
+        rng = parse_range(self.headers.get("Range") or "", size)
+        if rng is False:
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        start, end = rng or (0, size - 1)
+        status = 206 if rng else 200
+        if rng:
+            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        self.send_response(status)
+        self.send_header("Content-Type", mime if inline else "application/octet-stream")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Cache-Control", "private, max-age=31536000, immutable")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.end_headers()
+        if self.command == "HEAD":
+            return
+        with p.open("rb") as fh:                         # streamed: a big video is never held in memory
+            fh.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = fh.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
 
     # ------------------------------------------------------------------ pages
     def page(self, logged_in=True):
