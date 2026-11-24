@@ -8,6 +8,7 @@ import katex from "katex";
 import { useApp } from "../app/store";
 import { t } from "../i18n";
 import { fileUrl } from "../api";
+import { safeEmbed } from "../safe";
 import { Popover } from "../ui/Popover";
 import { EmojiPicker } from "../ui/Pickers";
 import { DatabaseView } from "../db/DatabaseView";
@@ -193,10 +194,10 @@ export const EmbedBlock = createReactBlockSpec(
       }
       return (
         <div className="cn-embed" contentEditable={false}>
-          <iframe src={embedUrl(url)} style={{ height: Number(block.props.height) || 420 }} loading="lazy"
+          {!safeEmbed(url) ? <div className="cn-muted pad">{url}</div> : <><iframe src={embedUrl(url)} style={{ height: Number(block.props.height) || 420 }} loading="lazy"
             sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-forms"
             allow="fullscreen; picture-in-picture; clipboard-write" referrerPolicy="no-referrer" title={url} />
-          <a href={url} target="_blank" rel="noreferrer" className="cn-embed-url">{url}</a>
+          <a href={url} target="_blank" rel="noreferrer" className="cn-embed-url">{url}</a></>}
         </div>
       );
     },

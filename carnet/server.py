@@ -12,6 +12,8 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -187,6 +189,37 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(n) if n else b""
         self._body_read = True
         return raw
+
+    def read_to_file(self, limit) -> Path:
+        """Stream the request body to a private temporary file (big uploads never sit in memory). The caller
+        deletes or moves it. A refused body is drained so that the client reads the error, not a broken pipe."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ValueError("bad Content-Length")
+        if n < 0:
+            raise ValueError("bad Content-Length")
+        if n > limit:
+            self._drain(limit + 64 * 1024 * 1024)        # beyond that, the client gets a reset
+            raise ValueError("too large")
+        tmp_dir = self.app.c.data_dir / "tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(dir=tmp_dir, prefix="upload-")
+        path = Path(name)
+        try:
+            with os.fdopen(fd, "wb") as out:
+                left = n
+                while left > 0:
+                    chunk = self.rfile.read(min(1 << 20, left))
+                    if not chunk:
+                        raise ValueError("body cut")
+                    out.write(chunk)
+                    left -= len(chunk)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        self._body_read = True
+        return path
 
     def read_body(self):
         raw = self.read_raw(MAX_JSON)
@@ -461,20 +494,24 @@ class Handler(BaseHTTPRequestHandler):
     def upload(self):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "file")
         try:
-            data = self.read_raw(self.app.c.max_upload_mb * 1024 * 1024)
+            tmp = self.read_to_file(self.app.c.max_upload_mb * 1024 * 1024)
         except ValueError as e:
             return self.json(413 if "large" in str(e) else 400, {"error": f"upload refused ({e})"})
         mime = (self.headers.get("Content-Type") or "").split(";")[0].strip() or None
         if mime in ("application/octet-stream", ""):
             mime = None
-        url = transfer.save_file(self.app.store, self.app.c.files_dir, name, data, mime,
-                                 self.headers.get("X-Page-Id") or None)
-        return self.json(200, {"url": url, "name": name, "size": len(data)})
+        size = tmp.stat().st_size
+        try:
+            url = transfer.save_file(self.app.store, self.app.c.files_dir, name, tmp, mime,
+                                     self.headers.get("X-Page-Id") or None)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return self.json(200, {"url": url, "name": name, "size": size})
 
     def import_upload(self, query):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "import.zip")
         try:
-            data = self.read_raw(max(self.app.c.max_upload_mb, 200) * 1024 * 1024)
+            data = self.read_to_file(max(self.app.c.max_upload_mb, 200) * 1024 * 1024)
         except ValueError as e:
             return self.json(413 if "large" in str(e) else 400, {"error": f"import refused ({e})"})
         try:
@@ -485,6 +522,8 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:                        # a corrupt zip
             log.exception("import failed")
             return self.json(400, {"error": f"import failed ({type(e).__name__})"})
+        finally:
+            data.unlink(missing_ok=True)
         return self.json(200, stats)
 
     def serve_file(self, path):
@@ -522,7 +561,12 @@ class Handler(BaseHTTPRequestHandler):
                   .replace("{{BOOT}}", json.dumps(boot).replace("<", "\\u003c"))
                   .replace("<!--EXTRA_HEAD-->", c.extra_head)
                   .replace("<!--EXTRA_BODY-->", c.extra_body))
-        self.send(200, raw, ctype="text/html; charset=utf-8", cache="no-cache")
+        # only this page's own <script> tags run: an injected script (XSS) has no nonce. Shiki needs WebAssembly.
+        nonce = secrets.token_urlsafe(18)
+        raw = re.sub(r"<script\b", f'<script nonce="{nonce}"', raw)
+        csp = (f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; frame-ancestors 'self'; object-src 'none'; "
+               "base-uri 'self'; form-action 'self'")
+        self.send(200, raw, ctype="text/html; charset=utf-8", cache="no-cache", headers={"Content-Security-Policy": csp})
 
     def static(self, path):
         c = self.app.c
@@ -585,6 +629,13 @@ def _janitor(store: Store):
 
 def make_app(config: Config) -> App:
     os.umask(0o077)                     # the database, its WAL files and uploads: owner only
+    data = Path(config.data_dir)
+    data.mkdir(parents=True, exist_ok=True)
+    try:
+        data.chmod(0o700)
+    except OSError:                     # e.g. a volume owned by someone else: leave it
+        pass
+    shutil.rmtree(data / "tmp", ignore_errors=True)       # uploads cut by a restart
     app = App(config)
     for f in Path(config.data_dir).glob("carnet.db*"):
         f.chmod(0o600)

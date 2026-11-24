@@ -248,19 +248,25 @@ def _value(p, v):
     return v
 
 
-def save_file(store: Store, files_dir: Path, name: str, data: bytes, mime: str | None = None, page_id=None) -> str:
+def save_file(store: Store, files_dir: Path, name: str, data: "bytes | Path", mime: str | None = None,
+              page_id=None) -> str:
+    """`data`: the bytes, or a file that is copied (an upload streamed to disk)."""
     name = re.sub(r"[\x00-\x1f/\\]", "_", name)[:180] or "file"
     mime = mime or mimetypes.guess_type(name)[0] or "application/octet-stream"
-    fid = store.add_file(name, mime, len(data), page_id)
+    size = data.stat().st_size if isinstance(data, Path) else len(data)
+    fid = store.add_file(name, mime, size, page_id)
     files_dir.mkdir(parents=True, exist_ok=True)
-    (files_dir / fid).write_bytes(data)
+    if isinstance(data, Path):
+        shutil.copyfile(data, files_dir / fid)
+    else:
+        (files_dir / fid).write_bytes(data)
     from urllib.parse import quote
     return f"/files/{fid}/{quote(name)}"
 
 
-def safe_extract(data: bytes, dest: Path):
-    """Unzip into dest, refusing absolute paths, '..' and zip bombs."""
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
+def safe_extract(data: "bytes | Path", dest: Path):
+    """Unzip into dest, refusing absolute paths, '..' and zip bombs. `data`: the archive bytes or its path."""
+    with zipfile.ZipFile(data if isinstance(data, Path) else io.BytesIO(data)) as z:
         infos = z.infolist()
         if len(infos) > MAX_ZIP_FILES or sum(i.file_size for i in infos) > MAX_ZIP_BYTES:
             raise ValueError("archive too large")
@@ -301,7 +307,8 @@ def import_path(store: Store, files_dir: Path, path: Path, parent_id=None, datab
     return imp.run(path)
 
 
-def import_upload(store: Store, files_dir: Path, filename: str, data: bytes, parent_id=None, databases=True) -> dict:
+def import_upload(store: Store, files_dir: Path, filename: str, data: "bytes | Path", parent_id=None,
+                  databases=True) -> dict:
     tmp = Path(tempfile.mkdtemp(prefix="carnet-"))
     try:
         low = filename.lower()
@@ -315,7 +322,10 @@ def import_upload(store: Store, files_dir: Path, filename: str, data: bytes, par
             return Importer(store, files_dir, parent_id, databases).run(root)
         if low.endswith((".md", ".markdown", ".txt")):
             f = tmp / (Path(filename).stem + ".md")
-            f.write_bytes(data)
+            if isinstance(data, Path):
+                shutil.copyfile(data, f)
+            else:
+                f.write_bytes(data)
             return import_path(store, files_dir, f, parent_id, databases)
         raise ValueError("send a .zip (Obsidian vault, Notion Markdown export, folder of notes) or a .md file")
     finally:

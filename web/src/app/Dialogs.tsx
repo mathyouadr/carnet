@@ -6,6 +6,7 @@ import { fmtDate, LANG, relTime, t } from "../i18n";
 import { MenuItem, Modal } from "../ui/Popover";
 import { setThemePref, themePref } from "./theme";
 import { renderTex } from "../editor/schema";
+import { blocksPreview as preview } from "./preview";
 
 // ------------------------------------------------------------------ move
 export function MoveDialog({ page, onClose }: { page: Summary; onClose: () => void }) {
@@ -209,47 +210,8 @@ export function HistoryModal({ pageId, onClose, onRestored }: { pageId: string; 
   );
 }
 
-function esc(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
-}
-
-function inlineHtml(c: any[]): string {
-  return (c || []).map((x) => {
-    if (x.type === "text") {
-      let s = esc(x.text);
-      if (x.styles?.bold) s = `<b>${s}</b>`;
-      if (x.styles?.italic) s = `<i>${s}</i>`;
-      if (x.styles?.code) s = `<code>${s}</code>`;
-      if (x.styles?.strike) s = `<s>${s}</s>`;
-      return s;
-    }
-    if (x.type === "link") return `<u>${inlineHtml(x.content)}</u>`;
-    if (x.type === "pageMention") return `<span class="cn-mention">${esc(x.props?.title || "")}</span>`;
-    if (x.type === "inlineMath") return renderTex(x.props?.latex || "", false).html;
-    return "";
-  }).join("");
-}
-
-/** Light read-only rendering of blocks for the history preview. */
 export function blocksPreview(blocks: any[]): string {
-  return (blocks || []).map((b) => {
-    const c = Array.isArray(b.content) ? inlineHtml(b.content) : "";
-    const kids = b.children?.length ? `<div style="margin-left:24px">${blocksPreview(b.children)}</div>` : "";
-    switch (b.type) {
-      case "heading": return `<h${b.props?.level || 1}>${c}</h${b.props?.level || 1}>${kids}`;
-      case "bulletListItem": return `<div>• ${c}</div>${kids}`;
-      case "numberedListItem": return `<div>1. ${c}</div>${kids}`;
-      case "checkListItem": return `<div>${b.props?.checked ? "☑" : "☐"} ${c}</div>${kids}`;
-      case "quote": return `<blockquote>${c}</blockquote>${kids}`;
-      case "callout": return `<div class="cn-callout bg-${b.props?.color}"><span>${b.props?.emoji}</span> ${c}</div>${kids}`;
-      case "codeBlock": return `<pre>${c}</pre>`;
-      case "math": return renderTex(b.props?.latex || "", true).html;
-      case "divider": return "<hr>";
-      case "image": return `<img src="${esc(b.props?.url?.startsWith("/files/") ? BASE + b.props.url : b.props?.url || "")}" style="max-width:100%">`;
-      case "table": return `<table>${(b.content?.rows || []).map((r: any) => `<tr>${r.cells.map((cell: any) => `<td>${inlineHtml(cell.content || cell)}</td>`).join("")}</tr>`).join("")}</table>`;
-      default: return `<p>${c}</p>${kids}`;
-    }
-  }).join("");
+  return preview(blocks, { base: BASE, tex: renderTex });
 }
 
 // ------------------------------------------------------------------ settings

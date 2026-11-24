@@ -18,7 +18,12 @@ issue. You will get an answer within a week.
 - **Uploaded files** are served from their own path with `Content-Security-Policy: sandbox`; anything that is not a
   plain image, PDF, audio or video file (HTML, SVG…) is sent as a download, never rendered as part of the site.
 - **Imports** refuse absolute paths, `..` and zip bombs.
-- Page content is rendered by the editor (ProseMirror), never injected as HTML; embeds run in sandboxed iframes.
-- SQL queries are parameterised; the database and uploads are readable by their owner only (`umask 077`).
+- Page content is rendered by the editor (ProseMirror); the few HTML previews (page history, AI answer) escape every
+  value. Links and URL properties only open `http(s)`, `mailto` and `tel`; embeds only load web pages and uploaded
+  files, in sandboxed iframes.
+- The web page sends `Content-Security-Policy: script-src 'self' 'nonce-…'`: only Carnet's own scripts (and the
+  `<script>` tags of `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY`, which get the nonce) can run, so injected HTML can't.
+- SQL queries are parameterised; the data folder, the database and uploads are readable by their owner only
+  (`umask 077`, folder in `700`). Uploads and imports are streamed to disk, not held in memory.
 - `X-Frame-Options`, `Content-Security-Policy: frame-ancestors 'self'`, `nosniff`, `Referrer-Policy: same-origin`.
 - The server has no third-party dependency: the Python standard library and SQLite.

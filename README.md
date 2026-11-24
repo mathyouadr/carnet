@@ -179,7 +179,7 @@ Environment variables (or a `.env` file next to where you start it):
 | `CARNET_AI_URL` | | OpenAI-compatible base URL (`…/v1`) for the AI assistant. Empty = no AI anywhere in the UI. |
 | `CARNET_AI_KEY` / `CARNET_AI_MODEL` | / `hermes-agent` | Bearer key (stays on the server) and model name sent to that endpoint. |
 | `CARNET_AI_NAME` / `CARNET_AI_SYSTEM` / `CARNET_AI_TIMEOUT` | `AI` / / `120` | Name shown in the UI, extra system prompt (`@/path` reads a file), seconds. |
-| `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). |
+| `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). `<script>` tags work (they get the page's CSP nonce); inline `onclick=` attributes don't. |
 
 ## ✨ AI assistant
 

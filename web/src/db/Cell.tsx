@@ -5,6 +5,7 @@ import { useApp } from "../app/store";
 import { fmtDate, t } from "../i18n";
 import { MenuItem, MenuSep, Popover } from "../ui/Popover";
 import { fmtNumber, newId, OPTION_COLORS, today, valueOf } from "./model";
+import { safeHref } from "../safe";
 
 export function Chip({ o, onRemove }: { o?: Option; onRemove?: () => void }) {
   if (!o) return null;
@@ -27,7 +28,8 @@ export function ValueView({ prop, value, compact }: { prop: Property; value: any
     case "date": return <span>{fmtDate(value.start)}{value.end ? " → " + fmtDate(value.end) : ""}</span>;
     case "created_time": case "edited_time": return <span className="cn-muted">{fmtDate(String(value).slice(0, 16).replace("Z", ""))}</span>;
     case "number": return <span className="num">{fmtNumber(value, prop.format)}</span>;
-    case "url": return <a href={/^[a-z]+:/i.test(value) ? value : "https://" + value} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="cn-link">{compact ? String(value).replace(/^https?:\/\/(www\.)?/, "") : value}</a>;
+    case "url": { const href = safeHref(value); if (!href) return <span className="cn-text">{String(value)}</span>;
+      return <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="cn-link">{compact ? String(value).replace(/^https?:\/\/(www\.)?/, "") : value}</a>; }
     case "email": return <a href={`mailto:${value}`} onClick={(e) => e.stopPropagation()} className="cn-link">{value}</a>;
     case "phone": return <a href={`tel:${value}`} onClick={(e) => e.stopPropagation()} className="cn-link">{value}</a>;
     case "relation": return (

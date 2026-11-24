@@ -190,6 +190,48 @@ class HTTPTests(unittest.TestCase):
         self.assertIn("sandbox", r.headers["Content-Security-Policy"])
         self.assertIn("attachment", r.headers["Content-Disposition"])
 
+    def test_upload_keeps_large_files_intact_and_refuses_oversize(self):
+        import os
+        blob = os.urandom(3 * 1024 * 1024 + 7)
+        st, up = self.req("POST", "/api/files", raw=blob, headers={
+            "X-Carnet-Upload": "1", "X-Filename": "b.bin", "Content-Type": "application/octet-stream"})
+        self.assertEqual((st, up["size"]), (200, len(blob)))
+        self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{self.port}{up['url']}").read(), blob)
+        self.app.c.max_upload_mb = 1
+        st, _ = self.req("POST", "/api/files", raw=blob, headers={
+            "X-Carnet-Upload": "1", "X-Filename": "b.bin", "Content-Type": "application/octet-stream"})
+        self.assertEqual(st, 413)
+        self.assertEqual(list((Path(self.tmp.name) / "tmp").glob("*")) if (Path(self.tmp.name) / "tmp").exists() else [], [])
+
+    def test_web_page_csp_allows_only_own_and_nonced_scripts(self):
+        import re
+        from carnet import server
+        idx = server.STATIC / "index.html"
+        if not idx.is_file():
+            self.skipTest("web app not built")
+        self.app.c.extra_body = '<script>window.x = 1</script><script src="/tabs.js"></script>'
+        r = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/")
+        csp = r.headers["Content-Security-Policy"]
+        html = r.read().decode()
+        m = re.search(r"script-src 'self' 'nonce-([A-Za-z0-9_-]{16,})'", csp)
+        self.assertTrue(m, csp)
+        self.assertNotIn("unsafe-inline", csp.split("script-src")[1].split(";")[0])
+        scripts = re.findall(r"<script\b[^>]*>", html)
+        self.assertTrue(scripts)
+        for tag in scripts:
+            self.assertIn(f'nonce="{m.group(1)}"', tag)
+        r2 = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/")
+        self.assertNotEqual(r2.headers["Content-Security-Policy"], csp)          # a new nonce per page
+
+    def test_data_dir_is_private(self):
+        import os
+        from carnet.server import make_app
+        d = Path(self.tmp.name) / "shared"
+        d.mkdir()
+        d.chmod(0o775)
+        make_app(Config(data_dir=d)).store.close()
+        self.assertEqual(os.stat(d).st_mode & 0o777, 0o700)
+
     def test_import_zip_endpoint(self):
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
