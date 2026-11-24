@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Menu as MenuIcon, ChevronsRight, FileText, Star, MoreHorizontal, Pencil, BookOpen, Copy, CornerUpRight, Trash2, History,
+  Menu as MenuIcon, ArrowLeft, Check, ChevronsRight, FileText, Star, MoreHorizontal, Pencil, BookOpen, Copy, CornerUpRight, Trash2, History,
   FileDown, Printer, Lock, Unlock, LayoutTemplate, MoveHorizontal, CaseSensitive, Link2, X, Maximize2, RotateCcw, Type,
 } from "lucide-react";
 import { api, BASE, BOOT, Page } from "../api";
@@ -32,21 +32,41 @@ function useSaveState() {
 
 function useModeFor(page: { id: string; locked?: boolean } | null, mobile: boolean) {
   const [mode, setMode] = useState<Record<string, "edit" | "read">>({});
-  const def = page?.locked ? "read" : mobile ? "read" : "edit";
+  // phones: the mode follows you from page to page (switch to edit once, stay in edit until you leave it)
+  const sticky = mobile && sessionStorage.getItem("carnet:mode") === "edit" ? "edit" : "read";
+  const def = page?.locked ? "read" : mobile ? sticky : "edit";
   const id = page?.id;
   useEffect(() => {     // the editor's mobile AI button asks for edit mode (Editor.tsx)
     if (!id) return;
     const on = (e: Event) => {
       const m = (e as CustomEvent).detail;
-      if (m === "edit" || m === "read") setMode((x) => ({ ...x, [id]: m }));
+      if (m === "edit" || m === "read") { if (mobile) sessionStorage.setItem("carnet:mode", m); setMode((x) => ({ ...x, [id]: m })); }
     };
     window.addEventListener("carnet:mode", on);
     return () => window.removeEventListener("carnet:mode", on);
-  }, [id]);
+  }, [id, mobile]);
   return {
     mode: page ? mode[page.id] || def : "edit",
-    set: (m: "edit" | "read") => page && setMode((x) => ({ ...x, [page.id]: m })),
+    set: (m: "edit" | "read") => {
+      if (mobile) sessionStorage.setItem("carnet:mode", m);
+      if (page) setMode((x) => ({ ...x, [page.id]: m }));
+    },
   };
+}
+
+/** Phones: one-tap "previous page". Uses the browser history when this session navigated inside Carnet,
+ *  otherwise goes up to the parent page (so it still does something after opening a link or reloading). */
+function BackButton({ page }: { page: Page | null }) {
+  const app = useApp();
+  const depth = (history.state?.i as number) || 0;
+  const parent = page?.path && page.path.length > 1 ? page.path[page.path.length - 2] : null;
+  if (!depth && !parent) return null;
+  return (
+    <button type="button" className="cn-icon-btn cn-back" title={t("Back")} aria-label={t("Back")}
+      onClick={() => { if (depth > 0) history.back(); else if (parent) app.navigate(parent.id); }}>
+      <ArrowLeft size={20} />
+    </button>
+  );
 }
 
 function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; setMode: (m: "edit" | "read") => void; page: Page | null; onRestored: () => void }) {
@@ -68,6 +88,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
   };
   return (
     <header className="cn-top">
+      {app.mobile && <BackButton page={page} />}
       {(!app.sidebar || app.mobile) && (
         <button type="button" className="cn-icon-btn" title={t("Open sidebar")} onClick={() => app.setSidebar(true)}>
           {app.mobile ? <MenuIcon size={19} /> : <ChevronsRight size={18} />}
@@ -88,10 +109,16 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           {page.readonly ? (
             <span className="cn-ro-badge" title={page.source?.path || ""}><FileText size={14} /> <span>{t("Markdown file · read only")}</span></span>
           ) : (
+          app.mobile ? (
+            <button type="button" className={`cn-mode-toggle ${mode === "edit" ? "on" : ""}`} onClick={() => setMode(mode === "edit" ? "read" : "edit")}>
+              {mode === "edit" ? <><Check size={16} /> <span>{t("Done")}</span></> : <><Pencil size={15} /> <span>{t("Modify")}</span></>}
+            </button>
+          ) : (
           <div className="cn-mode" role="group">
             <button type="button" className={mode === "edit" ? "on" : ""} onClick={() => setMode("edit")} title="Ctrl+Shift+L"><Pencil size={14} /> <span>{t("Edit")}</span></button>
             <button type="button" className={mode === "read" ? "on" : ""} onClick={() => setMode("read")} title="Ctrl+Shift+L"><BookOpen size={14} /> <span>{t("Read")}</span></button>
           </div>
+          )
           )}
           {!page.readonly && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
             onClick={async () => { try { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); await app.refresh(); } catch (e) { fail(e); } }}>
@@ -251,6 +278,9 @@ function Main() {
           )}
         </div>
       </main>
+      {app.mobile && page && !page.readonly && !page.in_trash && mode === "read" && !app.peek && !app.sidebar && (
+        <button type="button" className="cn-edit-fab" aria-label={t("Modify")} title={t("Modify")} onClick={() => setMode("edit")}><Pencil size={22} /></button>
+      )}
       <Peek />
       <Toasts />
       {app.searchOpen && <SearchPalette onClose={() => app.setSearchOpen(false)} />}

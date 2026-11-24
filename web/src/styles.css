@@ -706,3 +706,20 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 /* <figure> brings a 40 px browser margin: with width:100% the file card ran off the right edge */
 .bn-file-block-content-wrapper:has(.cn-file) { margin: 0; max-width: 100%; box-sizing: border-box; }
 .cn-peek .cn-ai-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+/* ------------------------------------------------------------------ phone: back button, edit toggle, edit FAB */
+.cn-edit-fab { display: none; }
+@media (max-width: 760px) {
+  .cn-back { margin-right: -2px; }
+  .cn-mode-toggle { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--cn-bg-3); color: var(--cn-fg); font: inherit; font-size: 14px; font-weight: 500; flex-shrink: 0; }
+  .cn-mode-toggle.on { background: var(--cn-accent); color: var(--cn-accent-fg); }
+  .cn-mode-toggle span { display: inline; }
+  .cn-save { display: none; }
+  .cn-edit-fab { display: flex; align-items: center; justify-content: center; position: fixed; right: 16px; bottom: calc(16px + var(--cn-bottom)); width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--cn-accent); color: var(--cn-accent-fg); box-shadow: 0 6px 18px rgba(0,0,0,.35); z-index: 31; touch-action: manipulation; }
+  .cn-edit-fab:active { transform: scale(.94); }
+  .cn-app .cn-ai-fab { bottom: calc(84px + var(--cn-bottom)); }
+  .cn-peek .cn-ai-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  html.cn-kb .cn-edit-fab { display: none; }
+  .cn-crumbs { flex: 1; min-width: 0; }
+}
+@media (max-width: 760px) { .cn-crumb .sep { display: none; } .cn-crumb a { font-weight: 500; font-size: 15px; } }

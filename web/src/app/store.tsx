@@ -141,8 +141,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const navigate = useCallback((id: string | null, opts?: { replace?: boolean }) => {
     const url = id ? pagePath(id) : `${BASE}/`;
-    if (opts?.replace) history.replaceState(null, "", url);
-    else if (location.pathname !== url) history.pushState(null, "", url);
+    // history.state.i = how many in-app steps deep we are (drives the phone "back" button)
+    const depth = (history.state?.i as number) || 0;
+    if (opts?.replace) history.replaceState({ i: depth }, "", url);
+    else if (location.pathname !== url) history.pushState({ i: depth + 1 }, "", url);
     setRoute({ pageId: id });
     setPeekState(null);
     if (id) localStorage.setItem("carnet:last", id);

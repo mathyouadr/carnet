@@ -3,7 +3,7 @@ const FR: Record<string, string> = {
   "New page": "Nouvelle page", "Search": "Rechercher", "Favorites": "Favoris", "Pages": "Pages",
   "Templates": "Modèles", "Trash": "Corbeille", "Settings": "Paramètres", "Untitled": "Sans titre",
   "Add a page": "Ajouter une page", "Add a sub-page": "Ajouter une sous-page", "No pages inside": "Aucune page à l'intérieur",
-  "Edit": "Édition", "Read": "Lecture", "Editing": "Édition", "Reading": "Lecture",
+  "Edit": "Édition", "Modify": "Modifier", "Read": "Lecture", "Editing": "Édition", "Reading": "Lecture",
   "Add to favorites": "Ajouter aux favoris", "Remove from favorites": "Retirer des favoris",
   "Cut": "Couper", "Copy": "Copier", "Paste": "Coller", "Code": "Code", "Clipboard access refused: use Ctrl V": "Accès au presse-papiers refusé : utilise Ctrl V", "Clipboard is empty": "Presse-papiers vide",
   "Presentation": "Présentation", "Text document": "Document texte", "Spreadsheet": "Tableur", "Archive": "Archive", "Text file": "Fichier texte", "Hide preview": "Masquer l'aperçu", "Preview": "Aperçu", "Download": "Télécharger",
