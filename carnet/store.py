@@ -361,6 +361,12 @@ class Store:
         return self.page(pid)
 
     def update(self, pid, data: dict) -> dict:
+        # the revision check and the write share one transaction, under the store lock: a save made in between
+        # can't be overwritten silently
+        with self.tx():
+            return self._update(pid, data)
+
+    def _update(self, pid, data: dict) -> dict:
         r = self._row(pid)
         if "rev" in data and data["rev"] is not None and "content" in data and int(data["rev"]) != r["rev"]:
             raise Conflict(self.page(pid))
