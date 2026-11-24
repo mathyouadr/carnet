@@ -151,7 +151,8 @@ class API:
         return transfer.page_markdown(self.s, pid)
 
     def search(self, b, q):
-        limit = int(q.get("limit") or 30)
+        # a limit outside 1..200 is clamped (a negative one would be a SQL 'no limit' and a slice from the end)
+        limit = min(max(int(q.get("limit") or 30), 1), 200)
         res = self.s.search(q.get("q", ""), limit)
         if self.md and q.get("q", "").strip():
             res = (res + self.md.search(q["q"], limit))[:limit]     # Carnet pages first, then Markdown notes

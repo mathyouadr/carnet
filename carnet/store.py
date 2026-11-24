@@ -441,6 +441,8 @@ class Store:
         return self.page(pid)
 
     def reorder_favorites(self, ids):
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            raise Invalid("ids must be a list of page ids")
         with self.tx():
             for i, pid in enumerate(ids):
                 self.x("UPDATE pages SET favorite=? WHERE id=? AND favorite IS NOT NULL", (i + 1, pid))
@@ -661,6 +663,8 @@ class Store:
     def _clean_content(self, content):
         if not isinstance(content, list):
             raise Invalid("content must be a list of blocks")
+        if not all(isinstance(b, dict) for b in content):
+            raise Invalid("each block must be an object")
         if len(json.dumps(content)) > 20_000_000:
             raise Invalid("page too large")
         return content
