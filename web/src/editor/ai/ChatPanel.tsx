@@ -1,7 +1,7 @@
 // Chat panel next to the page: questions and answers about the page, with a choice of model.
 // It never edits the page by itself (the ✨ button and /ia do that); an answer can be inserted by hand.
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, CornerDownLeft, Square, Trash2, X, MessageCircle } from "lucide-react";
+import { ArrowDownToLine, ArrowUp, Check, CornerDownLeft, Square, Trash2, X, MessageCircle } from "lucide-react";
 import { BOOT } from "../../api";
 import { t } from "../../i18n";
 import { sanitize } from "../sanitize";
@@ -60,14 +60,31 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
 
   const stop = () => ctrl.current?.abort();
 
-  /** Insert an answer under the block the cursor is on (the user's choice: the chat itself never writes). */
-  const insert = async (content: string) => {
+  const [done, setDone] = useState("");           // which insert button just worked (shown briefly)
+
+  /** Put markdown in the page: at its end, or under the block the cursor is on. The chat itself never writes. */
+  const insert = async (md: string, where: "end" | "cursor", tag: string) => {
     try {
-      const blocks = sanitize(await aiBlocks(stripFence(content)));
+      const blocks = sanitize(await aiBlocks(stripFence(md)));
       if (!blocks.length) return;
-      const ref = editor.getTextCursorPosition().block.id;
+      const doc: any[] = editor.document;
+      let ref = doc[doc.length - 1].id;
+      if (where === "cursor") { try { ref = editor.getTextCursorPosition().block.id; } catch { /* keep the end */ } }
       editor.transact(() => editor.insertBlocks(blocks, ref, "after"));
+      setError(""); setDone(tag); setTimeout(() => setDone((d) => (d === tag ? "" : d)), 1800);
+      requestAnimationFrame(() => {                // show what was added
+        const last = editor.document;
+        const id = (where === "end" ? last[last.length - 1] : editor.getBlock(ref) && editor.getTextCursorPosition().nextBlock)?.id;
+        if (id) editor.domElement?.querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+      });
     } catch { setError(t("AI request failed")); }
+  };
+
+  /** The whole conversation as Markdown: each question in bold, then the answer. */
+  const conversationMd = () => {
+    const out: string[] = [];
+    for (const m of msgs) if (m.content) out.push(m.role === "user" ? `**${m.content.replace(/\n+/g, " ")}**` : stripFence(m.content));
+    return out.join("\n\n");
   };
 
   return (
@@ -79,6 +96,12 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <span className="cn-chat-sp" />
+        {!!msgs.some((m) => m.role === "assistant" && m.content) && !busy && <>
+          <button type="button" className="cn-chat-ic" title={t("Add the conversation at the end of the page")} aria-label={t("Add the conversation at the end of the page")}
+            onClick={() => insert(conversationMd(), "end", "all-e")}>{done === "all-e" ? <Check size={15} /> : <ArrowDownToLine size={15} />}</button>
+          <button type="button" className="cn-chat-ic" title={t("Add the conversation under the cursor")} aria-label={t("Add the conversation under the cursor")}
+            onClick={() => insert(conversationMd(), "cursor", "all-c")}>{done === "all-c" ? <Check size={15} /> : <CornerDownLeft size={15} />}</button>
+        </>}
         {!!msgs.length && <button type="button" className="cn-chat-ic" title={t("New conversation")} aria-label={t("New conversation")}
           onClick={() => { stop(); setMsgs([]); setError(""); }}><Trash2 size={15} /></button>}
         <button type="button" className="cn-chat-ic" title={t("Close")} aria-label={t("Close")} onClick={() => { stop(); onClose(); }}><X size={16} /></button>
@@ -92,7 +115,12 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
                 ? <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: mdPreview(stripFence(m.content)) }} />
                 : <span className="cn-ai-thinking">…</span>}
               {m.content && !(busy && i === msgs.length - 1) && (
-                <button type="button" className="cn-chat-ins" onClick={() => insert(m.content)}><CornerDownLeft size={13} />{t("Insert below")}</button>)}
+                <div className="cn-chat-acts">
+                  <button type="button" className="cn-chat-ins" onClick={() => insert(m.content, "end", `e${i}`)}>
+                    {done === `e${i}` ? <Check size={13} /> : <ArrowDownToLine size={13} />}{done === `e${i}` ? t("Inserted") : t("At the end of the page")}</button>
+                  <button type="button" className="cn-chat-ins" onClick={() => insert(m.content, "cursor", `c${i}`)}>
+                    {done === `c${i}` ? <Check size={13} /> : <CornerDownLeft size={13} />}{done === `c${i}` ? t("Inserted") : t("Under the cursor")}</button>
+                </div>)}
             </div>)}
         {error && <div className="cn-ai-error">{error}</div>}
         <div ref={end} />

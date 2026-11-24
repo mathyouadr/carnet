@@ -807,3 +807,5 @@ body.cn-marquee-on { user-select: none; -webkit-user-select: none; cursor: defau
 .cn-chat-in { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--cn-line); }
 .cn-chat-in textarea { flex: 1; min-width: 0; resize: none; max-height: 120px; border: 1px solid var(--cn-line-2); border-radius: 8px; background: transparent; color: var(--cn-fg); font: inherit; font-size: 16px; padding: 6px 8px; outline: 0; field-sizing: content; }
 @media (max-width: 760px) { .cn-chat { left: 0; right: 0; top: 12%; bottom: 0; width: auto; max-width: none; border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
+.cn-chat-acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.cn-chat-acts .cn-chat-ins { margin-top: 0; border: 1px solid var(--cn-line-2); }
