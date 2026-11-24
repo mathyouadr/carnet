@@ -62,6 +62,13 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
   };
 
   const stop = () => ctrl.current?.abort();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {                                   // Escape always closes the chat (full screen too)
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape" && !document.querySelector(".cn-pop")) { ctrl.current?.abort(); closeRef.current(); } };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, []);
 
   const [done, setDone] = useState("");           // which insert button just worked (shown briefly)
 
@@ -109,7 +116,7 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
           onClick={() => { stop(); setMsgs([]); setError(""); }}><Trash2 size={15} /></button>}
         <button type="button" className="cn-chat-ic" title={t(full ? "Reduce" : "Full screen")} aria-label={t(full ? "Reduce" : "Full screen")}
           onClick={toggleFull}>{full ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
-        <button type="button" className="cn-chat-ic" title={t("Close")} aria-label={t("Close")} onClick={() => { stop(); onClose(); }}><X size={16} /></button>
+        <button type="button" className="cn-chat-ic close" title={t("Close")} aria-label={t("Close")} onClick={() => { stop(); onClose(); }}><X size={16} /></button>
       </div>
       <div className="cn-chat-body">
         {!msgs.length && <div className="cn-chat-empty">{t("Ask a question about this page. To change the page, use the AI button or /ia.")}</div>}
