@@ -121,12 +121,22 @@ const FR: Record<string, string> = {
   "Translate to French": "Traduire en français", "Translate to English": "Traduire en anglais", "Summarize": "Résumer",
   "Continue writing": "Continuer d'écrire", "Summarize the page": "Résumer la page",
   "Action items from the page": "Tâches à faire de la page",
+  "Something went wrong": "Une erreur s'est produite",
+  "The page could not be shown. Reloading usually fixes it.": "La page n'a pas pu s'afficher. Recharger règle souvent le problème.",
+  "Reload": "Recharger",
+  "Could not load this page. Check the connection.": "Impossible de charger cette page. Vérifiez la connexion.",
+  "Your changes could not be saved: {msg}": "Vos modifications n'ont pas pu être enregistrées : {msg}",
+  "This page changed elsewhere. Your last edits are kept as a copy.": "Cette page a été modifiée ailleurs. Vos dernières modifications sont gardées en copie.",
+  "Restore my copy": "Restaurer ma copie",
+  "Could not load the page": "Impossible de charger la page",
 };
 
 const lang = (() => {
-  const forced = (window as any).CARNET?.lang;
-  const saved = localStorage.getItem("carnet:lang");
-  const l = saved || forced || navigator.language || "en";
+  // guarded: the pure modules are also imported by the node tests (no window / localStorage there)
+  const forced = typeof window !== "undefined" ? (window as any).CARNET?.lang : undefined;
+  let saved: string | null = null;
+  try { saved = typeof localStorage !== "undefined" ? localStorage.getItem("carnet:lang") : null; } catch { /* private mode */ }
+  const l = saved || forced || (typeof navigator !== "undefined" ? navigator.language : "") || "en";
   return l.toLowerCase().startsWith("fr") ? "fr" : "en";
 })();
 
@@ -159,4 +169,11 @@ export function fmtDate(v: string, withYear = true): string {
   let s = d.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", opts);
   if (hasTime) s += " " + d.toLocaleTimeString(lang === "fr" ? "fr-FR" : "en-US", { hour: "2-digit", minute: "2-digit" });
   return s;
+}
+
+/** A server timestamp (ISO, UTC, with or without the trailing Z) shown in the reader's local time. */
+export function fmtStamp(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const s = /(Z|[+-]\d\d:?\d\d)$/.test(iso) ? iso : iso.replace(" ", "T") + "Z";
+  return fmtDate(s);
 }

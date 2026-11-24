@@ -73,6 +73,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { refresh().catch(() => {}); }, [refresh]);
+  // a click handler whose request failed must say so (no silent loss)
+  useEffect(() => {
+    const on = (e: PromiseRejectionEvent) => {
+      const msg = String((e.reason as any)?.message || e.reason || "");
+      if (msg) setToasts((ts) => [...ts.slice(-2), { id: ++toastId.current, text: t("Your changes could not be saved: {msg}").replace("{msg}", msg) }]);
+    };
+    addEventListener("unhandledrejection", on);
+    return () => removeEventListener("unhandledrejection", on);
+  }, []);
   useEffect(() => {
     const on = () => { setRoute(parseRoute()); setPeekState(null); };
     addEventListener("popstate", on);
@@ -126,7 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh, navigate]);
 
   const trashPage = useCallback(async (id: string) => {
-    await api.del(`/api/pages/${id}`);
+    try { await api.del(`/api/pages/${id}`); } catch (e: any) { toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e?.message))); return; }
     await refresh();
     toast(t("Move to trash") + " ✓", {
       label: t("Undo"),

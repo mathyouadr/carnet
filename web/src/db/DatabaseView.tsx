@@ -7,7 +7,7 @@ import { api, BASE, Page, Row, Schema, View } from "../api";
 import { useApp } from "../app/store";
 import { t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
-import { applyView, newId, propsFromFilters } from "./model";
+import { applyView, changedPropValues, newId, propsFromFilters, withOptionsFor } from "./model";
 import { BoardView, CalendarView, GalleryView, ListView, TableView } from "./Views";
 import { FilterEditor, filterLabel, RenameInline, SortEditor, VisibilityEditor } from "./Menus";
 
@@ -50,11 +50,15 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   const [pop, setPop] = useState<{ k: string; el: HTMLElement; i?: number } | null>(null);
   const saveTimer = useRef<any>(null);
 
+  // latest database, for handlers that run later (async saves, stale closures)
+  const dbRef = useRef<Page | null>(db);
+  const commit = useCallback((p: Page | null) => { dbRef.current = p; setDb(p); }, []);
   const load = useCallback(async () => {
-    try { setDb(await api.get(`/api/pages/${dbId}`)); setErr(""); } catch (e: any) { setErr(e.status === 404 ? t("Page not found") : String(e.message)); }
-  }, [dbId]);
-  useEffect(() => { if (!initial || initial.id !== dbId) load(); }, [dbId]);  // eslint-disable-line
-  useEffect(() => { if (initial && initial.id === dbId) setDb(initial); }, [initial, dbId]);
+    try { commit(await api.get(`/api/pages/${dbId}`)); setErr(""); } catch (e: any) { setErr(e.status === 404 ? t("Page not found") : String(e.message)); }
+  }, [dbId, commit]);
+  // ``initial`` (the page the parent already loaded) is used on mount or when the database changes only:
+  // the parent re-renders with a new ``initial`` on every title keystroke, which must not reset the rows
+  useEffect(() => { if (initial && initial.id === dbId) commit(initial); else load(); }, [dbId]);  // eslint-disable-line
   useChanged(dbId, load);
 
   if (err) return <div className="cn-db-missing">{err}</div>;
@@ -69,7 +73,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   const shown = applyView(rows, view, schema, search, app.titleOf);
 
   const persist = (patch: Partial<Page>) => {
-    setDb((d) => (d ? { ...d, ...patch } : d));
+    if (dbRef.current) commit({ ...dbRef.current, ...patch });
     clearTimeout(saveTimer.current);
     const body: any = {};
     if (patch.schema) body.schema = patch.schema;
@@ -79,9 +83,24 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
       if (patch.title !== undefined) app.patchTree(dbId, { title: p.title });
     }).catch((e) => app.toast(String(e.message)));
   };
-  const onSchema = (s: Schema) => persist({ schema: s });
-  const onView = (v: View) => persist({ views: views.map((x) => (x.id === v.id ? v : x)) });
-  const setRow = (id: string, patch: Partial<Row>) => setDb((d) => d ? { ...d, rows: (d.rows || []).map((r) => (r.id === id ? { ...r, ...patch, props: { ...r.props, ...(patch.props || {}) } } : r)) } : d);
+  // a property that changes type: its values in every row are converted (see changedPropValues)
+  const onSchema = (given: Schema) => {
+    const cur = dbRef.current;
+    const s = cur?.schema ? withOptionsFor(cur.rows || [], cur.schema, given, () => newId()) : given;
+    const moved = cur?.schema ? changedPropValues(cur.rows || [], cur.schema, s) : [];
+    persist({ schema: s });
+    for (const m of moved) {
+      setRow(m.id, { props: m.props } as any);
+      api.post(`/api/pages/${m.id}`, { props: m.props }).catch((e: any) => app.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e.message))));
+    }
+  };
+  // views are read from the latest state: two quick changes must not overwrite each other
+  const curViews = () => dbRef.current?.views ?? views;
+  const onView = (v: View) => persist({ views: curViews().map((x) => (x.id === v.id ? v : x)) });
+  const setRow = (id: string, patch: Partial<Row>) => {
+    const d = dbRef.current;
+    if (d) commit({ ...d, rows: (d.rows || []).map((r) => (r.id === id ? { ...r, ...patch, props: { ...r.props, ...(patch.props || {}) } } : r)) });
+  };
   const onRow = async (id: string, patch: { title?: string; props?: Record<string, any> }) => {
     setRow(id, patch as any);
     try {
@@ -89,7 +108,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
       setRow(id, { props: p.props, updated_at: p.updated_at, title: p.title });
       if (patch.title !== undefined) app.patchTree(id, { title: p.title });
       announce(id);
-    } catch (e: any) { app.toast(String(e.message)); load(); }
+    } catch (e: any) { app.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e.message))); load(); }
   };
   const onAdd = async (props: Record<string, any> = {}, open = false, template?: string) => {
     try {
@@ -110,7 +129,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   const vp = { rows: shown, schema, view, readOnly: !!readOnly, onRow, onAdd, onSchema, onView, open };
   const addView = (type: View["type"]) => {
     const v: View = { id: newId(8), name: t(VIEW_TYPES.find((x) => x.type === type)!.label), type };
-    persist({ views: [...views, v] });
+    persist({ views: [...curViews(), v] });
     pick(v.id);
     close();
   };
@@ -226,9 +245,9 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
             <label className="cn-toggle-row pad"><input type="checkbox" checked={!!view.wrap} onChange={(e) => onView({ ...view, wrap: e.target.checked })} /> {t("Wrap cells")}</label>
           )}
           <MenuSep />
-          <MenuItem icon={<Copy size={15} />} onClick={() => { const v = { ...view, id: newId(8), name: view.name + " 2" }; persist({ views: [...views, v] }); pick(v.id); close(); }}>{t("Duplicate view")}</MenuItem>
+          <MenuItem icon={<Copy size={15} />} onClick={() => { const v = { ...view, id: newId(8), name: view.name + " 2" }; persist({ views: [...curViews(), v] }); pick(v.id); close(); }}>{t("Duplicate view")}</MenuItem>
           <MenuItem icon={<Download size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${dbId}/export.csv`; close(); }}>{t("Export as CSV")}</MenuItem>
-          {views.length > 1 && !locked && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { persist({ views: views.filter((v) => v.id !== view.id) }); close(); }}>{t("Delete view")}</MenuItem>}
+          {views.length > 1 && !locked && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { persist({ views: curViews().filter((v) => v.id !== view.id) }); close(); }}>{t("Delete view")}</MenuItem>}
         </Popover>
       )}
       {pop?.k === "filter" && (

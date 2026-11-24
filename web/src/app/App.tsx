@@ -11,6 +11,7 @@ import { PageView } from "../page/PageView";
 import { relTime, t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
 import { seedWelcome } from "./welcome";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 function useSaveState() {
   const [s, setS] = useState<"saving" | "saved" | "error" | "">("");
@@ -46,10 +47,13 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
   const s = page ? app.byId.get(page.id) : undefined;
   const crumbs = page?.path || [];
   const opt = page?.options || {};
+  const fail = (e: any) => app.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e?.message || e)));
   const setOpt = async (o: Record<string, any>) => {
     if (!page) return;
-    await api.post(`/api/pages/${page.id}`, { options: o });
-    onRestored();
+    try {
+      await api.post(`/api/pages/${page.id}`, { options: o });
+      onRestored();
+    } catch (e) { fail(e); }
   };
   return (
     <header className="cn-top">
@@ -79,7 +83,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           </div>
           )}
           {!page.readonly && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
-            onClick={async () => { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); app.refresh(); }}>
+            onClick={async () => { try { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); await app.refresh(); } catch (e) { fail(e); } }}>
             <Star size={17} fill={s?.favorite ? "currentColor" : "none"} />
           </button>}
           <button type="button" className="cn-icon-btn" onClick={(e) => setMenu(e.currentTarget)}><MoreHorizontal size={18} /></button>
@@ -105,9 +109,9 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           <MenuItem icon={opt.locked ? <Unlock size={15} /> : <Lock size={15} />} onClick={() => { setOpt({ locked: !opt.locked }); setMode(opt.locked ? "edit" : "read"); setMenu(null); }}>{opt.locked ? t("Unlock page") : t("Lock page")}</MenuItem>
           <MenuSep />
           <MenuItem icon={<Link2 size={15} />} onClick={() => { navigator.clipboard?.writeText(location.origin + pagePath(page.id)).then(() => app.toast(t("Link copied"))); setMenu(null); }}>{t("Copy link")}</MenuItem>
-          <MenuItem icon={<Copy size={15} />} onClick={async () => { const c = await api.post(`/api/pages/${page.id}/duplicate`); await app.refresh(); app.navigate(c.id); setMenu(null); }}>{t("Duplicate")}</MenuItem>
+          <MenuItem icon={<Copy size={15} />} onClick={async () => { setMenu(null); try { const c = await api.post(`/api/pages/${page.id}/duplicate`); await app.refresh(); app.navigate(c.id); } catch (e) { fail(e); } }}>{t("Duplicate")}</MenuItem>
           <MenuItem icon={<CornerUpRight size={15} />} onClick={() => { setMove(true); setMenu(null); }}>{t("Move to")}</MenuItem>
-          <MenuItem icon={<LayoutTemplate size={15} />} onClick={async () => { await api.post(`/api/pages/${page.id}`, { is_template: !page.is_template }); await app.refresh(); onRestored(); setMenu(null); }}>
+          <MenuItem icon={<LayoutTemplate size={15} />} onClick={async () => { setMenu(null); try { await api.post(`/api/pages/${page.id}`, { is_template: !page.is_template }); await app.refresh(); onRestored(); } catch (e) { fail(e); } }}>
             {page.is_template ? t("Stop being a template") : t("Turn into template")}
           </MenuItem>
           <MenuItem icon={<History size={15} />} onClick={() => { setHist(true); setMenu(null); }}>{t("Page history")}</MenuItem>
@@ -196,7 +200,10 @@ function Main() {
   // page meta for the top bar (title/breadcrumbs/options)
   useEffect(() => {
     if (!pid) { setPage(null); return; }
-    api.get<Page>(`/api/pages/${pid}`).then(setPage).catch(() => setPage(null));
+    // a late answer for the previous page must not land on the current one
+    let live = true;
+    api.get<Page>(`/api/pages/${pid}`).then((p) => { if (live) setPage(p); }).catch(() => { if (live) setPage(null); });
+    return () => { live = false; };
   }, [pid, reload]);
   useEffect(() => {
     const s = page ? app.byId.get(page.id) : null;
@@ -228,7 +235,7 @@ function Main() {
           {pid ? <PageView key={pid} pageId={pid} editable={mode === "edit" && !page?.in_trash && !page?.readonly} /> : <div className="cn-page-loading" />}
           {page?.in_trash && (
             <div className="cn-trash-banner">{t("This page is in the trash.")}
-              <button type="button" className="cn-btn sm" onClick={async () => { await api.post(`/api/pages/${page.id}/restore`); await app.refresh(); setReload((x) => x + 1); }}>{t("Restore")}</button>
+              <button type="button" className="cn-btn sm" onClick={async () => { try { await api.post(`/api/pages/${page.id}/restore`); await app.refresh(); setReload((x) => x + 1); } catch (e) { app.toast(String((e as any)?.message || e)); } }}>{t("Restore")}</button>
             </div>
           )}
         </div>
@@ -245,5 +252,5 @@ function Main() {
 
 export function App() {
   if (BOOT.protected && !BOOT.loggedIn) return <Login />;
-  return <AppProvider><Main /></AppProvider>;
+  return <ErrorBoundary><AppProvider><Main /></AppProvider></ErrorBoundary>;
 }

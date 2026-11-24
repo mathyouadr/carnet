@@ -244,7 +244,7 @@ select.cn-input { padding: 0 6px; }
 i.bgbar-default { background: transparent !important; border: 1px solid var(--cn-line-2); } i.bgbar-gray { background: var(--c-gray) !important; } i.bgbar-brown { background: var(--c-brown) !important; } i.bgbar-orange { background: var(--c-orange) !important; } i.bgbar-yellow { background: var(--c-yellow) !important; } i.bgbar-green { background: var(--c-green) !important; } i.bgbar-blue { background: var(--c-blue) !important; } i.bgbar-purple { background: var(--c-purple) !important; } i.bgbar-pink { background: var(--c-pink) !important; } i.bgbar-red { background: var(--c-red) !important; }
 
 /* custom blocks */
-.cn-callout { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px 14px 12px; border-radius: 6px; width: 100%; }
+.cn-callout { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px 14px 12px; border-radius: 6px; width: 100%; box-sizing: border-box; min-width: 0; overflow-wrap: anywhere; }
 .cn-callout.bg-default { border: 1px solid var(--cn-line-2); }
 .cn-callout-emoji { border: 0; background: transparent; font-size: 20px; line-height: 1.3; padding: 0 2px; border-radius: 4px; flex-shrink: 0; }
 .cn-callout-emoji:hover { background: var(--cn-hover); }
