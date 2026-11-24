@@ -561,12 +561,38 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 
 /* ------------------------------------------------------------------ print / PDF: the page only */
 @media print {
+  /* a host page may force a dark palette on html[data-theme]: paper is always light */
+  html[data-theme][data-theme] {
+    --cn-bg: #ffffff; --cn-bg-2: #f7f7f5; --cn-bg-3: #f1f1ef; --cn-card: #ffffff; --cn-pop: #ffffff;
+    --cn-fg: #37352f; --cn-fg-2: #787774; --cn-fg-3: #a5a29c; --cn-line: rgba(55,53,47,.09); --cn-line-2: rgba(55,53,47,.16);
+    --cn-hover: rgba(55,53,47,.06); --cn-active: rgba(55,53,47,.1); --cn-accent: #2383e2; --cn-accent-fg: #fff; --cn-accent-soft: rgba(35,131,226,.14);
+    --cn-danger: #eb5757; --cn-shadow: 0 0 0 1px rgba(15,15,15,.05), 0 3px 6px rgba(15,15,15,.1), 0 9px 24px rgba(15,15,15,.2);
+    --cn-font: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Noto Color Emoji";
+    --cn-serif: Lyon-Text, Georgia, ui-serif, serif; --cn-mono: "iawriter-mono", Nitti, Menlo, Courier, monospace;
+    --cn-radius: 6px; --cn-side-w: 248px; --cn-top: 0px; --cn-bottom: 0px;
+    --t-gray: #787774; --t-brown: #9f6b53; --t-orange: #d9730d; --t-yellow: #cb912f; --t-green: #448361; --t-blue: #337ea9; --t-purple: #9065b0; --t-pink: #c14c8a; --t-red: #d44c47;
+    --b-gray: #f1f1ef; --b-brown: #f4eeee; --b-orange: #fbecdd; --b-yellow: #fbf3db; --b-green: #edf3ec; --b-blue: #e7f3f8; --b-purple: #f6f3f9; --b-pink: #faf1f5; --b-red: #fdebec;
+    --c-default: rgba(227,226,224,.6); --c-gray: #e3e2e0; --c-brown: #eee0da; --c-orange: #fadec9; --c-yellow: #fdecc8; --c-green: #dbeddb; --c-blue: #d3e5ef; --c-purple: #e8deee; --c-pink: #f5e0e9; --c-red: #ffe2dd;
+    color-scheme: light;
+  }
   .cn-sidebar, .cn-top, .cn-toolbar, .cn-peek, .cn-peek-bg, .cn-toasts, .cn-page-addons, .cn-backlinks, .cn-page-foot, .bn-side-menu { display: none !important; }
   .cn-app, .cn-scroll, .cn-main { display: block; height: auto; overflow: visible; }
   .cn-page-inner { padding: 0 !important; max-width: none; }
   .cn-page { padding-bottom: 0; }
   body { background: #fff; color: #000; }
   .cn-cover { height: 160px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cn-page-inner { padding-left: 0 !important; padding-right: 0 !important; }
+  .cn-title { font-size: 30px; }
+  .bn-container, .bn-editor { background: #fff !important; }
+  [data-content-type="heading"] { break-after: avoid; }
+  /* highlighted code is light-on-dark: on paper it must stay readable even when backgrounds are not printed */
+  [data-content-type="codeBlock"], [data-content-type="codeBlock"] pre { background: #f4f4f2 !important; color: #222 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  [data-content-type="codeBlock"] pre, [data-content-type="codeBlock"] pre * { white-space: pre-wrap; break-inside: avoid; }
+  [data-content-type="codeBlock"] pre *, [data-content-type="codeBlock"] select { color: #222 !important; }
+  [data-content-type="codeBlock"] select { display: none; }
+  [data-content-type="callout"], [data-content-type="image"], [data-content-type="table"], .cn-file-row, .cn-card, blockquote { break-inside: avoid; }
+  .cn-file-badge, .cn-callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  a { color: inherit; }
 }
 
 .cn-editor-error { margin: 24px 54px; padding: 14px 16px; border-radius: 8px; background: var(--cn-bg-2); color: var(--cn-fg-2); font-size: 14px; }

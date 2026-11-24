@@ -6,6 +6,7 @@ import {
 import { api, BASE, BOOT, Page } from "../api";
 import { AppProvider, pagePath, useApp } from "./store";
 import { Sidebar } from "./Sidebar";
+import { printPage } from "./print";
 import { HistoryModal, Login, MoveDialog, SearchPalette, SettingsModal, TemplatesPanel, TrashPanel } from "./Dialogs";
 import { PageView } from "../page/PageView";
 import { relTime, t } from "../i18n";
@@ -103,7 +104,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
         <Popover anchor={menu} onClose={() => setMenu(null)} width={260} placement="bottom-end">
           <MenuItem icon={<Link2 size={15} />} onClick={() => { navigator.clipboard?.writeText(location.origin + pagePath(page.id)).then(() => app.toast(t("Link copied"))); setMenu(null); }}>{t("Copy link")}</MenuItem>
           <MenuItem icon={<FileDown size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${page.id}/export.md`; setMenu(null); }}>{t("Export as Markdown")}</MenuItem>
-          <MenuItem icon={<Printer size={15} />} onClick={() => { setMenu(null); setTimeout(() => print(), 300); }}>{t("Export as PDF")}</MenuItem>
+          <MenuItem icon={<Printer size={15} />} onClick={() => { setMenu(null); printPage(); }}>{t("Export as PDF")}</MenuItem>
         </Popover>
       )}
       {menu && page && !page.readonly && (
@@ -127,7 +128,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           <MenuItem icon={<History size={15} />} onClick={() => { setHist(true); setMenu(null); }}>{t("Page history")}</MenuItem>
           <MenuSep />
           <MenuItem icon={<FileDown size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${page.id}/export.md`; setMenu(null); }}>{t("Export as Markdown")}</MenuItem>
-          <MenuItem icon={<Printer size={15} />} onClick={() => { setMenu(null); setMode("read"); setTimeout(() => print(), 300); }}>{t("Export as PDF")}</MenuItem>
+          <MenuItem icon={<Printer size={15} />} onClick={() => { setMenu(null); setMode("read"); printPage(); }}>{t("Export as PDF")}</MenuItem>
           <MenuSep />
           <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { app.trashPage(page.id); setMenu(null); }}>{t("Move to trash")}</MenuItem>
         </Popover>
