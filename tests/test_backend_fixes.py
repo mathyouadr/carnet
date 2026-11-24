@@ -315,7 +315,7 @@ class StoreRegressionTests(unittest.TestCase):
         s = Store(self.data_path("orphan.db"), files_dir=self.data_path("files"))
         try:
             p = s.create({"title": "P"})
-            fid = transfer.save_file(s, self.data_path("files"), "a.txt", b"hi", None, p["id"])
+            fid = transfer.save_file(s, self.data_path("files"), "a.txt", b"hi", None, p["id"]).split("/")[2]
             s.delete_forever(p["id"])
             self.assertFalse((self.data_path("files") / fid).exists())
             with self.assertRaises(NotFound):
@@ -327,7 +327,7 @@ class StoreRegressionTests(unittest.TestCase):
         s = Store(self.data_path("kept.db"), files_dir=self.data_path("files2"))
         try:
             p = s.create({"title": "P"})
-            fid = transfer.save_file(s, self.data_path("files2"), "a.txt", b"hi", None, p["id"])
+            fid = transfer.save_file(s, self.data_path("files2"), "a.txt", b"hi", None, p["id"]).split("/")[2]
             s.create({"title": "Q", "content": [{"type": "image", "props": {"url": f"/files/{fid}"}}]})
             s.delete_forever(p["id"])
             self.assertTrue((self.data_path("files2") / fid).exists())

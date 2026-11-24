@@ -41,7 +41,7 @@ def main(argv=None):
     if cmd == "serve":
         from .server import serve
         return serve(config)
-    store = Store(config.db_path)
+    store = Store(config.db_path, files_dir=config.files_dir)
     if cmd == "import":
         path = Path(args.path).expanduser()
         if not path.exists():

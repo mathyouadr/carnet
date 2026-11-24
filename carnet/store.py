@@ -120,8 +120,9 @@ SUMMARY = ("id", "parent_id", "kind", "title", "icon", "position", "favorite", "
 
 
 class Store:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, files_dir: str | Path | None = None):
         self.db_file = str(path)
+        self.files_dir = Path(files_dir) if files_dir is not None else None   # uploaded bytes, removed with their page
         if self.db_file != ":memory:":
             Path(self.db_file).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.db_file, check_same_thread=False, isolation_level=None)
@@ -487,8 +488,9 @@ class Store:
 
     def _purge(self, roots) -> int:
         """Delete pages and everything under them, in one transaction. A root already removed by an ancestor
-        (trashed parent and child) is skipped, so a purge can't stop half way. Returns the number of pages."""
-        ids = []
+        (trashed parent and child) is skipped, so a purge can't stop half way. Uploaded files that were attached
+        to these pages go too, unless a remaining page or version still refers to them. Returns the number of pages."""
+        ids, dropped = [], []
         with self.tx():
             for root in roots:
                 if self.q1("SELECT 1 FROM pages WHERE id=?", (root,)) is None:
@@ -502,7 +504,24 @@ class Store:
                 self.x("DELETE FROM links WHERE src=? OR dst=?", (i, i))
                 if self.fts:
                     self.x("DELETE FROM search WHERE id=?", (i,))
+            for i in ids:
+                for f in self.q("SELECT id FROM files WHERE page_id=?", (i,)):
+                    if f["id"] not in dropped and not self._referenced(f["id"]):
+                        dropped.append(f["id"])
+            for fid in dropped:
+                self.x("DELETE FROM files WHERE id=?", (fid,))
+        # the bytes go after the commit: a rollback must never leave rows pointing at missing files
+        if self.files_dir is not None:
+            for fid in dropped:
+                (self.files_dir / fid).unlink(missing_ok=True)
         return len(ids)
+
+    def _referenced(self, fid) -> bool:
+        """Conservative: any stored text mentioning the file id counts as a reference."""
+        return bool(self.q1("SELECT 1 FROM pages WHERE instr(title || icon || cover || content || props || schema "
+                            "|| views || options, ?) > 0 LIMIT 1", (fid,))
+                    or self.q1("SELECT 1 FROM versions WHERE instr(title || icon || content || props, ?) > 0 "
+                               "LIMIT 1", (fid,)))
 
     def empty_trash(self) -> int:
         return self._purge([r["id"] for r in self.q("SELECT id FROM pages WHERE trashed_at IS NOT NULL")])

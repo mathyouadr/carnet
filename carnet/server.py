@@ -69,7 +69,7 @@ def _no_constant(name):
 class App:
     def __init__(self, config: Config, store: Store | None = None):
         self.c = config
-        self.store = store or Store(config.db_path)
+        self.store = store or Store(config.db_path, files_dir=config.files_dir)
         self.folders = MdFolders(parse_spec(config.md_folders))
         self.api = API(self.store, self, self.folders)
         # the password is part of the signing key: changing it logs every session out
