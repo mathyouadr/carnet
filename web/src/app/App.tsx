@@ -120,7 +120,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
           </div>
           )
           )}
-          {!page.readonly && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
+          {!page.readonly && !app.mobile && <button type="button" className={`cn-icon-btn ${s?.favorite ? "fav" : ""}`} title={s?.favorite ? t("Remove from favorites") : t("Add to favorites")}
             onClick={async () => { try { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); await app.refresh(); } catch (e) { fail(e); } }}>
             <Star size={17} fill={s?.favorite ? "currentColor" : "none"} />
           </button>}
@@ -142,6 +142,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
               <button type="button" key={k} className={`f-${k || "default"} ${(opt.font || "") === k ? "on" : ""}`} onClick={() => setOpt({ font: k })}><b>{g}</b><span>{t(l)}</span></button>
             ))}
           </div>
+          {app.mobile && <MenuItem icon={<Star size={15} fill={s?.favorite ? "currentColor" : "none"} />} onClick={async () => { setMenu(null); try { await api.post(`/api/pages/${page.id}`, { favorite: !s?.favorite }); await app.refresh(); } catch (e) { fail(e); } }}>{s?.favorite ? t("Remove from favorites") : t("Add to favorites")}</MenuItem>}
           <MenuItem icon={<Type size={15} />} right={<input type="checkbox" readOnly checked={!!opt.small_text} />} onClick={() => setOpt({ small_text: !opt.small_text })}>{t("Small text")}</MenuItem>
           <MenuItem icon={<MoveHorizontal size={15} />} right={<input type="checkbox" readOnly checked={!!opt.full_width} />} onClick={() => setOpt({ full_width: !opt.full_width })}>{t("Full width")}</MenuItem>
           <MenuItem icon={opt.locked ? <Unlock size={15} /> : <Lock size={15} />} onClick={() => { setOpt({ locked: !opt.locked }); setMode(opt.locked ? "edit" : "read"); setMenu(null); }}>{opt.locked ? t("Unlock page") : t("Lock page")}</MenuItem>

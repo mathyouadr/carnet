@@ -724,3 +724,11 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 }
 @media (max-width: 760px) { .cn-crumb .sep { display: none; } .cn-crumb a { font-weight: 500; font-size: 15px; } }
 @media (max-width: 760px) { .cn-peek-top { padding-top: calc(8px + env(safe-area-inset-top)); } }
+/* phone top bar & floating buttons: room for the title, no pill over the content */
+@media (max-width: 760px) {
+  .cn-mode-toggle { height: 34px; padding: 0 12px; font-size: 13.5px; }
+  .cn-top .cn-icon-btn { width: 38px; }
+  .cn-crumb a { max-width: none; }
+  .cn-app .cn-ai-fab { width: 44px; height: 44px; padding: 0 !important; justify-content: center; right: 22px !important; bottom: calc(84px + var(--cn-bottom)); background: var(--cn-bg-3); border: 1px solid var(--cn-line-2); color: #b197fc; }
+  .cn-app .cn-ai-fab .cn-ai-fab-tx { display: none; }
+}

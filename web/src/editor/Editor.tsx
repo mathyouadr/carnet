@@ -329,7 +329,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
             sessionStorage.setItem("carnet:ai-open", page.id);
             window.dispatchEvent(new CustomEvent("carnet:mode", { detail: "edit" }));   // App.tsx switches to edit mode
           }}>
-          <Sparkles size={16} />{t("Ask AI")}
+          <Sparkles size={18} /><span className="cn-ai-fab-tx">{t("Ask AI")}</span>
         </button>
       )}
       {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
