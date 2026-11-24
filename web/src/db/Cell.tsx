@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MoreHorizontal, Trash2, X, Plus, ArrowUpRight } from "lucide-react";
 import type { Option, Property, Row, Schema } from "../api";
 import { useApp } from "../app/store";
-import { fmtDate, t } from "../i18n";
+import { fmtDate, fmtStamp, t } from "../i18n";
 import { MenuItem, MenuSep, Popover } from "../ui/Popover";
-import { fmtNumber, newId, OPTION_COLORS, today, valueOf } from "./model";
+import { asList, fmtNumber, newId, OPTION_COLORS, today, valueOf } from "./model";
 import { safeHref } from "../safe";
 
 export function Chip({ o, onRemove }: { o?: Option; onRemove?: () => void }) {
@@ -23,17 +23,21 @@ export function ValueView({ prop, value, compact }: { prop: Property; value: any
   if (value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) return null;
   switch (prop.type) {
     case "select": case "status": return <Chip o={prop.options?.find((o) => o.id === value)} />;
-    case "multi_select": return <span className="cn-chips">{(value as string[]).map((id) => <Chip key={id} o={prop.options?.find((o) => o.id === id)} />)}</span>;
+    case "multi_select": return <span className="cn-chips">{asList(value).map((id) => <Chip key={id} o={prop.options?.find((o) => o.id === id)} />)}</span>;
     case "checkbox": return <span className={`cn-check ${value ? "on" : ""}`}>{value && <Check size={12} strokeWidth={3} />}</span>;
-    case "date": return <span>{fmtDate(value.start)}{value.end ? " → " + fmtDate(value.end) : ""}</span>;
-    case "created_time": case "edited_time": return <span className="cn-muted">{fmtDate(String(value).slice(0, 16).replace("Z", ""))}</span>;
+    case "date": {
+      // a value converted from another type may be a bare string: show it as it is
+      if (typeof value === "string") return <span>{fmtDate(value)}</span>;
+      return <span>{fmtDate(value?.start)}{value?.end ? " → " + fmtDate(value.end) : ""}</span>;
+    }
+    case "created_time": case "edited_time": return <span className="cn-muted">{fmtStamp(String(value))}</span>;
     case "number": return <span className="num">{fmtNumber(value, prop.format)}</span>;
     case "url": { const href = safeHref(value); if (!href) return <span className="cn-text">{String(value)}</span>;
       return <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="cn-link">{compact ? String(value).replace(/^https?:\/\/(www\.)?/, "") : value}</a>; }
     case "email": return <a href={`mailto:${value}`} onClick={(e) => e.stopPropagation()} className="cn-link">{value}</a>;
     case "phone": return <a href={`tel:${value}`} onClick={(e) => e.stopPropagation()} className="cn-link">{value}</a>;
     case "relation": return (
-      <span className="cn-chips">{(value as string[]).map((id) => {
+      <span className="cn-chips">{asList(value).map((id: string) => {
         const p = app.byId.get(id);
         return p ? <a key={id} className="cn-rel" onClick={(e) => { e.stopPropagation(); app.setPeek(id); }}>{p.icon || "📄"} {p.title || t("Untitled")}</a> : null;
       })}</span>
@@ -49,7 +53,7 @@ export function OptionPicker({ prop, value, multi, onChange, onSchema }: {
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<{ o: Option; el: HTMLElement } | null>(null);
   const opts = prop.options || [];
-  const sel: string[] = multi ? (value || []) : value ? [value] : [];
+  const sel: string[] = multi ? asList(value) : value ? [value] : [];
   const shown = opts.filter((o) => o.name.toLowerCase().includes(q.toLowerCase()));
   const exact = opts.find((o) => o.name.toLowerCase() === q.trim().toLowerCase());
   const pick = (id: string) => {
@@ -142,7 +146,7 @@ export function DatePicker({ prop, value, onChange }: { prop: Property; value: a
 export function RelationPicker({ prop, value, onChange }: { prop: Property; value: any; onChange: (v: any) => void }) {
   const app = useApp();
   const [q, setQ] = useState("");
-  const sel: string[] = value || [];
+  const sel: string[] = asList(value);
   const target = prop.database_id;
   const cands = app.tree.filter((p) => (target ? p.parent_id === target : p.kind === "page" && !p.is_template) &&
     (p.title || "").toLowerCase().includes(q.toLowerCase())).slice(0, 50);

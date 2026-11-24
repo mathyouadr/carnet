@@ -7,7 +7,7 @@ import { Popover } from "../ui/Popover";
 import { coverStyle } from "../ui/Pickers";
 import { OpenButton, PropValue, ValueView } from "./Cell";
 import { AddProperty, PropertyMenu } from "./Menus";
-import { isEmpty, newId, OPTION_COLORS, TITLE, today, typeIcon, valueOf } from "./model";
+import { asList, isEmpty, newId, OPTION_COLORS, propsFromFilters, TITLE, today, typeIcon, valueOf } from "./model";
 
 export type ViewProps = {
   rows: Row[]; schema: Schema; view: View; readOnly: boolean;
@@ -104,7 +104,7 @@ export function TableView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
           </div>
         ))}
         {!readOnly && (
-          <div className="cn-tr add" onClick={async () => { const r = await onAdd(presetFromFilters(view, schema), false); if (r) setFresh(r.id); }}>
+          <div className="cn-tr add" onClick={async () => { const r = await onAdd(propsFromFilters(view, schema), false); if (r) setFresh(r.id); }}>
             <Plus size={15} /> {t("New")}
           </div>
         )}
@@ -120,26 +120,6 @@ export function TableView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
   );
 }
 
-/** New rows created while a view is filtered get the filtered values (like Notion). */
-export function presetFromFilters(view: View, schema: Schema): Record<string, any> {
-  const out: Record<string, any> = {};
-  if (view.filter_mode === "or") return out;
-  for (const f of view.filters || []) {
-    const p = schema.properties.find((x) => x.id === f.prop);
-    if (!p || f.value === undefined || f.value === "") continue;
-    if ((p.type === "select" || p.type === "status") && f.op === "is") out[p.id] = f.value;
-    if (p.type === "multi_select" && f.op === "contains") out[p.id] = [f.value];
-    if (p.type === "relation" && f.op === "contains") out[p.id] = [f.value];
-    if (p.type === "checkbox") out[p.id] = f.op === "checked";
-    if (p.type === "date" && f.op === "is") out[p.id] = { start: f.value === "today" ? today() : f.value };
-    if ((p.type === "text" || p.type === "url") && f.op === "is") out[p.id] = f.value;
-  }
-  for (const f of view.filters || []) {
-    const p = schema.properties.find((x) => x.id === f.prop);
-    if (p?.type === "checkbox" && f.op === "checked") out[p.id] = true;
-  }
-  return out;
-}
 
 // ================================================================== card (board & gallery)
 function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
@@ -200,7 +180,13 @@ export function BoardView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
     if (!id || readOnly) return;
     const r = rows.find((x) => x.id === id);
     if (!r || inGroup(r, gid)) return;
-    const v = gp.type === "multi_select" ? (gid ? [gid] : []) : gid || null;
+    // only the group the card came from is replaced: the other tags of a multi-select stay
+    const from = e.dataTransfer.getData("text/carnet-group");
+    let v: any;
+    if (gp.type === "multi_select") {
+      const kept = asList(r.props?.[gp.id]).filter((x) => x !== from && x !== gid);
+      v = gid ? [...kept, gid] : kept;
+    } else v = gid || null;
     onRow(id, { props: { [gp.id]: v } });
   };
   return (
@@ -214,10 +200,10 @@ export function BoardView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
             <div className="cn-col-head"><span className={`cn-chip c-${g.color}`}>{g.name}</span><span className="cn-muted">{items.length}</span></div>
             {items.map((r) => (
               <Card key={r.id} row={r} schema={schema} view={view} open={() => open(r.id)} cover draggable={!readOnly}
-                onDragStart={(e) => { e.dataTransfer.setData("text/carnet-row", r.id); e.dataTransfer.effectAllowed = "move"; }} />
+                onDragStart={(e) => { e.dataTransfer.setData("text/carnet-row", r.id); e.dataTransfer.setData("text/carnet-group", g.id); e.dataTransfer.effectAllowed = "move"; }} />
             ))}
             {!readOnly && (
-              <button type="button" className="cn-col-add" onClick={() => onAdd({ ...presetFromFilters(view, schema), ...(g.id ? { [gp.id]: gp.type === "multi_select" ? [g.id] : g.id } : {}) }, true)}>
+              <button type="button" className="cn-col-add" onClick={() => onAdd({ ...propsFromFilters(view, schema), ...(g.id ? { [gp.id]: gp.type === "multi_select" ? [g.id] : g.id } : {}) }, true)}>
                 <Plus size={14} /> {t("New")}
               </button>
             )}
@@ -257,20 +243,21 @@ export function ListView({ rows, schema, view, readOnly, onAdd, open }: ViewProp
           <span className="props">{props.filter((p) => !isEmpty(valueOf(r, p.id, schema))).slice(0, 4).map((p) => <ValueView key={p.id} prop={p} value={valueOf(r, p.id, schema)} compact />)}</span>
         </div>
       ))}
-      {!readOnly && <div className="cn-list-row add" onClick={() => onAdd(presetFromFilters(view, schema), true)}><Plus size={15} /> {t("New")}</div>}
+      {!readOnly && <div className="cn-list-row add" onClick={() => onAdd(propsFromFilters(view, schema), true)}><Plus size={15} /> {t("New")}</div>}
     </div>
   );
 }
 
 // ================================================================== gallery
-export function GalleryView({ rows, schema, view, readOnly, onAdd, open }: ViewProps) {
+export function GalleryView({ rows, schema, view, readOnly, onAdd, open, onView }: ViewProps) {
   const gp = view.group_by ? schema.properties.find((p) => p.id === view.group_by && ["select", "status", "multi_select"].includes(p.type)) : undefined;
-  const [closed, setClosed] = useState<string[]>(view.collapsed || []);
+  const closed = view.collapsed || [];   // saved in the view, so it survives a reload
+  const toggle = (gid: string, shut: boolean) => onView({ ...view, collapsed: shut ? closed.filter((x) => x !== gid) : [...closed, gid] });
   const grid = (list: Row[], preset: Record<string, any>) => (
     <div className={`cn-gallery ${view.card_size || "medium"}`}>
       {!list.length && readOnly && <div className="cn-muted cn-gal-empty">{t("Nothing here yet")}</div>}
       {list.map((r) => <Card key={r.id} row={r} schema={schema} view={view} open={() => open(r.id)} cover />)}
-      {!readOnly && <button type="button" className="cn-card add" onClick={() => onAdd({ ...presetFromFilters(view, schema), ...preset }, true)}><Plus size={16} /> {t("New")}</button>}
+      {!readOnly && <button type="button" className="cn-card add" onClick={() => onAdd({ ...propsFromFilters(view, schema), ...preset }, true)}><Plus size={16} /> {t("New")}</button>}
     </div>
   );
   if (!gp) return grid(rows, {});
@@ -289,7 +276,7 @@ export function GalleryView({ rows, schema, view, readOnly, onAdd, open }: ViewP
         const shut = closed.includes(g.id);
         return (
           <section key={g.id || "_none"} className="cn-gal-group">
-            <button type="button" className="cn-gal-head" onClick={() => setClosed(shut ? closed.filter((x) => x !== g.id) : [...closed, g.id])}>
+            <button type="button" className="cn-gal-head" onClick={() => toggle(g.id, shut)}>
               <ChevronRight size={15} className={shut ? "" : "open"} />
               <span className={`cn-chip c-${g.color}`}>{g.name}</span>
               <span className="cn-muted">{g.rows.length}</span>
@@ -390,7 +377,7 @@ export function CalendarView({ rows, schema, view, readOnly, onRow, onAdd, onSch
               onDragOver={(e) => { if (editable) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver(null)}
               onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/carnet-row"); if (id) moveTo(id, k); }}>
               <div className="cn-cal-num"><span className="n">{d.getDate()}</span>
-                {editable && <button type="button" className="cn-cal-add" onClick={(e) => { e.stopPropagation(); onAdd({ ...presetFromFilters(view, schema), [dp.id]: { start: k } }, true); }}><Plus size={12} /></button>}
+                {editable && <button type="button" className="cn-cal-add" onClick={(e) => { e.stopPropagation(); onAdd({ ...propsFromFilters(view, schema), [dp.id]: { start: k } }, true); }}><Plus size={12} /></button>}
               </div>
               <div className="cn-cal-items">
                 {items.slice(0, app.mobile ? 3 : 4).map((r) => (
@@ -409,7 +396,7 @@ export function CalendarView({ rows, schema, view, readOnly, onRow, onAdd, onSch
         <div className="cn-cal-daylist">
           {sel.map((r) => <div key={r.id} className="cn-list-row" onClick={() => open(r.id)}><span className="ic">{r.icon || <FileText size={15} />}</span><span className="tx">{r.title || t("Untitled")}</span></div>)}
           {!sel.length && <div className="cn-muted pad">{t("No results")}</div>}
-          {editable && <div className="cn-list-row add" onClick={() => onAdd({ ...presetFromFilters(view, schema), [dp.id]: { start: selDay } }, true)}><Plus size={15} /> {t("New")}</div>}
+          {editable && <div className="cn-list-row add" onClick={() => onAdd({ ...propsFromFilters(view, schema), [dp.id]: { start: selDay } }, true)}><Plus size={15} /> {t("New")}</div>}
         </div>
       )}
       {rows.filter((r) => !valueOf(r, dp.id, schema)).length > 0 && (
