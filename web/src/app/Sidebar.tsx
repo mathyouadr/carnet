@@ -129,7 +129,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
         <button type="button" className="cn-icon-btn" title={t("New page")} onClick={() => addChild(null)}><SquarePen size={16} /></button>
       </div>
       <div className="cn-side-nav">
-        <button type="button" className="cn-side-item" onClick={() => app.setSearchOpen(true)}><Search size={16} /> <span>{t("Search")}</span><kbd>Ctrl K</kbd></button>
+        <button type="button" className="cn-side-item" onClick={() => { if (app.mobile) app.setSidebar(false); app.setSearchOpen(true); }}><Search size={16} /> <span>{t("Search")}</span>{!app.mobile && <kbd>Ctrl K</kbd>}</button>
       </div>
       <div className="cn-side-scroll" onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null); }}>
         {favs.length > 0 && (

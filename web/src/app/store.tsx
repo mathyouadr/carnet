@@ -55,6 +55,38 @@ function useMobile() {
   return m;
 }
 
+/** Phones: mark <html> with `cn-kb` while the on-screen keyboard is up (an editable has focus and the
+ *  visual viewport lost > 120 px). CSS then drops the host's bottom tab bar so the editor keeps its room. */
+function useKeyboardFlag(mobile: boolean) {
+  useEffect(() => {
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    if (!mobile || !vv) { root.classList.remove("cn-kb"); return; }
+    let base = vv.height;
+    const editable = () => {
+      const a = document.activeElement as HTMLElement | null;
+      return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    };
+    const on = () => {
+      const ed = editable();
+      if (!ed) base = Math.max(base, vv.height + vv.offsetTop);
+      root.classList.toggle("cn-kb", ed && base - vv.height - vv.offsetTop > 120);
+    };
+    const orient = () => { base = vv.height; on(); };
+    vv.addEventListener("resize", on);
+    document.addEventListener("focusin", on);
+    document.addEventListener("focusout", () => setTimeout(on, 50));
+    window.addEventListener("orientationchange", orient);
+    on();
+    return () => {
+      vv.removeEventListener("resize", on);
+      document.removeEventListener("focusin", on);
+      window.removeEventListener("orientationchange", orient);
+      root.classList.remove("cn-kb");
+    };
+  }, [mobile]);
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [tree, setTree] = useState<Summary[]>([]);
   const [settings, setSettings] = useState<Record<string, any>>({});
@@ -62,6 +94,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [peek, setPeekState] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const mobile = useMobile();
+  useKeyboardFlag(mobile);
   const [sidebar, setSidebarState] = useState(() => !matchMedia("(max-width: 760px)").matches && localStorage.getItem("carnet:sidebar") !== "0");
   const [searchOpen, setSearchOpen] = useState(false);
   const toastId = useRef(0);

@@ -676,3 +676,33 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-file-pdf { width: 100%; height: 520px; border: 1px solid var(--cn-line); border-radius: 10px; margin-top: 6px; background: #fff; }
 @media print { .cn-file-btn { display: none; } .cn-file-pdf { display: none; } .cn-file-row { break-inside: avoid; } }
 .bn-file-block-content-wrapper:has(.cn-file) { width: 100%; }
+
+/* ------------------------------------------------------------------ phone usability (touch targets, keyboard, floating button) */
+.cn-ai-fab { bottom: calc(16px + var(--cn-bottom)); }
+@media (max-width: 760px) {
+  /* the host's bottom tab bar is hidden while the keyboard is up: no reserved room, no floating button */
+  html.cn-kb[data-theme] { --cn-bottom: 0px; }
+  html.cn-kb .cn-ai-fab { display: none !important; }
+  /* fingers need ~40 px; mouse-sized 28 px buttons were missed or hit the neighbour */
+  .cn-icon-btn { width: 40px; height: 40px; }
+  .cn-top { gap: 0; padding-left: 4px; padding-right: 4px; }
+  .cn-side-head .cn-icon-btn, .cn-side-label .cn-icon-btn { width: 36px; height: 36px; }
+  .cn-node-tog { width: 32px; height: 32px; }
+  .cn-node-act button { width: 36px; height: 36px; }
+  .cn-node, .cn-side-item { min-height: 44px; }
+  .cn-view-tab { height: 38px; padding: 0 12px; }
+  .cn-view-tab.on::after { left: 10px; right: 10px; bottom: 0; }
+  .cn-db-tools .cn-icon-btn { width: 40px; height: 40px; }
+  .cn-mode button { height: 34px; padding: 0 13px; }
+  .cn-mode { padding: 3px; }
+  .cn-rowprop-name { height: auto; min-height: 40px; }
+  /* iOS zooms the page when a field under 16 px takes focus */
+  input, textarea, select, .cn-ai-ask input { font-size: 16px; }
+  .cn-editor [data-content-type="codeBlock"] select { font-size: 16px; padding: 6px 8px; }
+  .cn-page { overscroll-behavior-y: contain; }
+  .cn-scroll { overscroll-behavior-y: contain; -webkit-tap-highlight-color: transparent; }
+  button, a, [role="button"] { touch-action: manipulation; }
+}
+/* <figure> brings a 40 px browser margin: with width:100% the file card ran off the right edge */
+.bn-file-block-content-wrapper:has(.cn-file) { margin: 0; max-width: 100%; box-sizing: border-box; }
+.cn-peek .cn-ai-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }

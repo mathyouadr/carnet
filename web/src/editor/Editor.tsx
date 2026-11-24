@@ -323,8 +323,8 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         <SuggestionMenuController triggerCharacter="@" getItems={mentionItems} />
       </BlockNoteView>
       {aiAvailable && !editable && app.mobile && (
-        <button type="button" className="cn-btn" aria-label={t("Ask AI")} title={t("Ask AI")}
-          style={{ position: "fixed", right: 16, bottom: 16, zIndex: 30, display: "flex", alignItems: "center", gap: 6, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}
+        <button type="button" aria-label={t("Ask AI")} title={t("Ask AI")}
+          className="cn-btn cn-ai-fab" style={{ position: "fixed", right: 16, zIndex: 30, display: "flex", alignItems: "center", gap: 6, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}
           onClick={() => {
             sessionStorage.setItem("carnet:ai-open", page.id);
             window.dispatchEvent(new CustomEvent("carnet:mode", { detail: "edit" }));   // App.tsx switches to edit mode
