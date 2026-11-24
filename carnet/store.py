@@ -447,8 +447,11 @@ class Store:
     def restore(self, pid) -> dict:
         r = self._row(pid)
         self.x("UPDATE pages SET trashed_at=NULL WHERE id=?", (pid,))
-        if r["parent_id"] and r["parent_id"] not in self.alive_ids():
-            self.x("UPDATE pages SET parent_id=NULL, inline=0 WHERE id=?", (pid,))   # parent gone: back to the root
+        if r["parent_id"]:
+            # keep the parent, unless it is gone or is itself in the trash: then the page goes back to the root
+            parent = self.q1("SELECT trashed_at FROM pages WHERE id=?", (r["parent_id"],))
+            if parent is None or parent["trashed_at"]:
+                self.x("UPDATE pages SET parent_id=NULL, inline=0 WHERE id=?", (pid,))
         return self.page(pid)
 
     def trashed(self) -> list[dict]:
