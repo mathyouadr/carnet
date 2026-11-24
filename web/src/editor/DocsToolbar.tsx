@@ -126,7 +126,7 @@ export function DocsToolbar({ editor, pageId, slot, onAI }: { editor: any; pageI
       <div className="cn-tb-scroll">
         <B title="Undo" onClick={() => editor.undo()}><Undo2 size={16} /></B>
         <B title="Redo" onClick={() => editor.redo()}><Redo2 size={16} /></B>
-        {onAI && <B title="Ask AI" onClick={onAI}><Sparkles size={16} className="cn-ai-spark" /></B>}
+        {onAI && <B title={t("Ask AI")} onClick={onAI}><Sparkles size={16} className="cn-ai-spark" /></B>}
         <span className="cn-tb-sep" />
         <button type="button" className={`cn-tb-select ${pop?.k === "kind" ? "open" : ""}`} onMouseDown={(e) => e.preventDefault()} onClick={open("kind")}>
           <span>{t(kind.label)}</span><ChevronDown size={14} />
