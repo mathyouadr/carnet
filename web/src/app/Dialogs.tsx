@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Table2, Search as SearchIcon, RotateCcw, Trash2, Upload, Download, Sun, Moon, Monitor, Clock, LogOut, Plus, LayoutTemplate, CornerDownLeft } from "lucide-react";
 import { api, BASE, BOOT, Summary } from "../api";
 import { useApp } from "./store";
-import { fmtDate, LANG, relTime, t } from "../i18n";
+import { fmtStamp, LANG, relTime, t } from "../i18n";
 import { MenuItem, Modal } from "../ui/Popover";
 import { setThemePref, themePref } from "./theme";
 import { renderTex } from "../editor/schema";
@@ -158,8 +158,13 @@ export function TemplatesPanel({ onClose }: { onClose: () => void }) {
         <MenuItem key={p.id} icon={<span>{p.icon || <LayoutTemplate size={15} />}</span>}
           right={<button type="button" className="cn-btn sm" onClick={async (e) => {
             e.stopPropagation();
-            const np = await api.post(`/api/templates/${p.id}/use`, { parent_id: app.pageId && !app.byId.get(app.pageId)?.is_template ? null : null });
-            await app.refresh(); app.navigate(np.id); onClose();
+            // the new page goes next to the page being read (at the top level when none is a plain page)
+            const here = app.byId.get(app.pageId || "");
+            const parent = here && here.kind === "page" && !here.is_row && !here.is_template ? here.parent_id : null;
+            try {
+              const np = await api.post(`/api/templates/${p.id}/use`, { parent_id: parent });
+              await app.refresh(); app.navigate(np.id); onClose();
+            } catch (err: any) { app.toast(String(err?.message)); }
           }}>{t("Use template")}</button>}
           onClick={() => { app.navigate(p.id); onClose(); }}>{p.title || t("Untitled")}</MenuItem>
       ))}
@@ -191,7 +196,7 @@ export function HistoryModal({ pageId, onClose, onRestored }: { pageId: string; 
           <div className="cn-history-list">
             {(list || []).map((v) => (
               <button type="button" key={v.id} className={`cn-hist-item ${cur?.id === v.id ? "on" : ""}`} onClick={() => pick(v.id)}>
-                <Clock size={14} /> <span>{fmtDate(v.created_at.slice(0, 16).replace("Z", ""))}</span><small>{relTime(v.created_at)}</small>
+                <Clock size={14} /> <span>{fmtStamp(v.created_at)}</span><small>{relTime(v.created_at)}</small>
               </button>
             ))}
           </div>

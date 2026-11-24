@@ -169,16 +169,18 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
             }}>{t("Copy link")}</MenuItem>
           ) : <>
           <MenuItem icon={menu.p.favorite ? <StarOff size={15} /> : <Star size={15} />} onClick={async () => {
-            await api.post(`/api/pages/${menu.p.id}`, { favorite: !menu.p.favorite });
-            app.refresh(); setMenu(null);
+            setMenu(null);
+            try { await api.post(`/api/pages/${menu.p.id}`, { favorite: !menu.p.favorite }); await app.refresh(); }
+            catch (e: any) { app.toast(String(e?.message)); }
           }}>{menu.p.favorite ? t("Remove from favorites") : t("Add to favorites")}</MenuItem>
           <MenuItem icon={<Link2 size={15} />} onClick={() => {
             navigator.clipboard?.writeText(location.origin + pagePath(menu.p.id)).then(() => app.toast(t("Link copied")));
             setMenu(null);
           }}>{t("Copy link")}</MenuItem>
           <MenuItem icon={<Copy size={15} />} onClick={async () => {
-            const c = await api.post(`/api/pages/${menu.p.id}/duplicate`);
-            await app.refresh(); app.navigate(c.id); setMenu(null);
+            setMenu(null);
+            try { const c = await api.post(`/api/pages/${menu.p.id}/duplicate`); await app.refresh(); app.navigate(c.id); }
+            catch (e: any) { app.toast(String(e?.message)); }
           }}>{t("Duplicate")}</MenuItem>
           <MenuItem icon={<CornerUpRight size={15} />} onClick={() => { setMove(menu.p); setMenu(null); }}>{t("Move to")}</MenuItem>
           <MenuSep />

@@ -9,7 +9,7 @@ import { Editor } from "../editor/Editor";
 import { DatabaseView, announce, useChanged } from "../db/DatabaseView";
 import { PropValue } from "../db/Cell";
 import { AddProperty, PropertyMenu } from "../db/Menus";
-import { typeIcon } from "../db/model";
+import { changedPropValues, newId, typeIcon, withOptionsFor } from "../db/model";
 
 export function setSaveState(s: "saving" | "saved" | "error") {
   window.dispatchEvent(new CustomEvent("carnet:save", { detail: s }));
@@ -19,70 +19,138 @@ export function usePage(id: string | null) {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<number | null>(null);
   const [version, setVersion] = useState(0);        // bump = remount the editor with fresh content
+  const current = useRef(id);
+  current.current = id;
+  // true while local edits are not on the server yet: a reload must not overwrite them
+  const dirty = useRef(false);
   const load = useCallback(async (remount = true) => {
     if (!id) return;
     try {
       const p = await api.get<Page>(`/api/pages/${id}`);
+      if (current.current !== id || dirty.current) return;   // another page now, or edits in progress
       setPage(p);
       setError(null);
       if (remount) setVersion((v) => v + 1);
-    } catch (e: any) { setError(e.status || 500); }
+    } catch (e: any) {
+      if (current.current === id) setError(e.status === 404 ? 404 : -1);
+    }
   }, [id]);
   useEffect(() => { setPage(null); setError(null); load(); }, [id]);  // eslint-disable-line
-  return { page, setPage, error, load, version };
+  return { page, setPage, error, load, version, setVersion, dirty };
+}
+
+const COPY_KEY = (id: string) => `carnet:copy:${id}`;
+
+/** Unsaved text of a page that the server refused (someone else changed it): kept in the browser, never dropped silently. */
+function keepCopy(id: string, copy: { title?: string; content?: any[] }) {
+  try { localStorage.setItem(COPY_KEY(id), JSON.stringify({ at: new Date().toISOString(), ...copy })); } catch { /* quota: the toast still says so */ }
 }
 
 export function PageView({ pageId, editable, peek }: { pageId: string; editable: boolean; peek?: boolean }) {
   const app = useApp();
-  const { page, setPage, error, load, version } = usePage(pageId);
+  const { page, setPage, error, load, version, setVersion, dirty } = usePage(pageId);
   const pending = useRef<{ content?: any[]; title?: string } | null>(null);
   const timer = useRef<any>(null);
   const rev = useRef(0);
+  const inFlight = useRef(false);
   const [iconPop, setIconPop] = useState<HTMLElement | null>(null);
   const [coverPop, setCoverPop] = useState<HTMLElement | null>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  // refs read by the stable callbacks below (they must not change identity: see the unload effect)
+  const pageIdRef = useRef(pageId);
+  pageIdRef.current = pageId;
+  const appRef = useRef(app);
+  appRef.current = app;
+  const loadRef = useRef(load);
+  loadRef.current = load;
   useEffect(() => { if (page) rev.current = page.rev; }, [page?.id, version]);  // eslint-disable-line
 
   // a row edited in its database view (peek open) or by another tab
   useChanged(pageId, () => { if (!pending.current) load(); });
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (): Promise<void> => {
     clearTimeout(timer.current);
+    if (inFlight.current) { timer.current = setTimeout(flush, 300); return; }   // one save at a time
     const p = pending.current;
-    if (!p) return;
+    if (!p) { dirty.current = false; return; }
     pending.current = null;
+    inFlight.current = true;
+    const id = pageIdRef.current;
     setSaveState("saving");
     try {
       const body: any = { ...p };
       if (p.content) body.rev = rev.current;
-      const res = await api.post<Page>(`/api/pages/${pageId}`, body);
-      rev.current = res.rev;
-      setPage((old) => (old ? { ...old, rev: res.rev, updated_at: res.updated_at, title: res.title, backlinks: res.backlinks, children: res.children } : old));
-      app.patchTree(pageId, { title: res.title, updated_at: res.updated_at });
+      const res = await api.post<Page>(`/api/pages/${id}`, body);
+      const newer = pending.current as { content?: any[]; title?: string } | null;   // typed while the request was in flight
+      if (pageIdRef.current === id) {
+        rev.current = res.rev;
+        setPage((old) => (old && old.id === id ? {
+          ...old, rev: res.rev, updated_at: res.updated_at, backlinks: res.backlinks, children: res.children,
+          title: newer?.title !== undefined ? old.title : res.title,
+        } : old));
+      }
+      if (newer?.title === undefined) appRef.current.patchTree(id, { title: res.title, updated_at: res.updated_at });
       if (p.title !== undefined) announce(res.parent_id);
-      setSaveState("saved");
+      if (!pending.current) dirty.current = false;
+      setSaveState(pending.current ? "saving" : "saved");
     } catch (e: any) {
       if (e.status === 409) {
-        app.toast(t("This page was changed elsewhere: reloaded."));
-        load();
+        // changed elsewhere: keep what we had as a copy, then show the server version
+        const copy = { ...p, ...(pending.current || {}) };
+        pending.current = null;
+        dirty.current = false;
+        keepCopy(id, copy);
         setSaveState("saved");
-      } else {
+        appRef.current.toast(t("This page changed elsewhere. Your last edits are kept as a copy."), {
+          label: t("Restore my copy"), run: () => restoreCopy(copy),
+        });
+        await loadRef.current();
+      } else if (!e.status || e.status >= 500) {
+        // network or server trouble: keep the changes and retry
         pending.current = { ...p, ...(pending.current || {}) };
         setSaveState("error");
         timer.current = setTimeout(flush, 4000);
+      } else {
+        // refused for good (validation, forbidden…): keep a copy and say so, no retry loop
+        keepCopy(pageIdRef.current, { ...p });
+        pending.current = null;
+        dirty.current = false;
+        setSaveState("error");
+        appRef.current.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e.message)));
       }
+    } finally {
+      inFlight.current = false;
     }
-  }, [pageId, app, load, setPage]);
+  }, [setPage]);  // eslint-disable-line
 
   const queue = useCallback((patch: { content?: any[]; title?: string }, delay = 700) => {
     pending.current = { ...(pending.current || {}), ...patch };
+    dirty.current = true;
     setSaveState("saving");
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, delay);
   }, [flush]);
 
+  // show the copy kept after a conflict: reload the server version, then put the copy's text back and save it
+  const restoreCopy = async (copy: { title?: string; content?: any[] }) => {
+    try { localStorage.removeItem(COPY_KEY(pageIdRef.current)); } catch { /* ignore */ }
+    await loadRef.current();
+    setPage((old) => (old ? { ...old, ...(copy.title !== undefined ? { title: copy.title } : {}), ...(copy.content ? { content: copy.content } : {}) } : old));
+    setVersion((v) => v + 1);
+    queue({ ...copy }, 300);
+  };
+
+  // the tab is closing: send what is pending with keepalive (the normal queue would be cut off)
   useEffect(() => {
-    const before = () => { if (pending.current) flush(); };
+    const before = () => {
+      const p = pending.current;
+      if (!p) return;
+      clearTimeout(timer.current);
+      pending.current = null;
+      const body: any = { ...p };
+      if (p.content) body.rev = rev.current;
+      api.postKeepalive(`/api/pages/${pageIdRef.current}`, body);
+    };
     addEventListener("beforeunload", before);
     addEventListener("pagehide", before);
     return () => { removeEventListener("beforeunload", before); removeEventListener("pagehide", before); flush(); };
@@ -90,11 +158,17 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
 
   const update = async (patch: Record<string, any>) => {
     setPage((p) => (p ? { ...p, ...patch, options: patch.options ? { ...p.options, ...patch.options } : p.options } : p));
-    const res = await api.post<Page>(`/api/pages/${pageId}`, patch);
-    rev.current = res.rev;
-    app.patchTree(pageId, { icon: res.icon, title: res.title });
-    announce(res.parent_id);
-    return res;
+    try {
+      const res = await api.post<Page>(`/api/pages/${pageId}`, patch);
+      rev.current = res.rev;
+      setPage((p) => (p ? { ...p, rev: res.rev } : p));
+      app.patchTree(pageId, { icon: res.icon, title: res.title });
+      announce(res.parent_id);
+      return res;
+    } catch (e: any) {
+      app.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e.message)));
+      load();
+    }
   };
 
   // auto-grow title
@@ -103,7 +177,8 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
     if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
   });
 
-  if (error) return <div className="cn-page-missing"><h2>{t("Page not found")}</h2><button className="cn-btn" onClick={() => app.navigate(null)}>{t("Go home")}</button></div>;
+  if (error === 404) return <div className="cn-page-missing"><h2>{t("Page not found")}</h2><button className="cn-btn" onClick={() => app.navigate(null)}>{t("Go home")}</button></div>;
+  if (error) return <div className="cn-page-missing"><h2>{t("Could not load the page")}</h2><p>{t("Could not load this page. Check the connection.")}</p><button className="cn-btn" onClick={() => load()}>{t("Retry")}</button></div>;
   if (!page) return <div className="cn-page-loading" />;
 
   const isDb = page.kind === "database";
@@ -138,7 +213,7 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
           </div>
         )}
         <textarea ref={titleRef} className="cn-title" rows={1} value={page.title} placeholder={t("Untitled")} readOnly={!editable}
-          onChange={(e) => { const v = e.target.value.replace(/\n/g, ""); setPage({ ...page, title: v }); app.patchTree(page.id, { title: v }); queue({ title: v }, 400); }}
+          onChange={(e) => { const v = e.target.value.replace(/\n/g, ""); setPage((p) => (p ? { ...p, title: v } : p)); app.patchTree(page.id, { title: v }); queue({ title: v }, 400); }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -202,17 +277,27 @@ function RowProperties({ page, editable, onPage }: { page: Page; editable: boole
   const [add, setAdd] = useState<HTMLElement | null>(null);
   useEffect(() => setSchema(page.database!.schema), [page.database]);
   const dbId = page.database!.id;
-  const saveSchema = async (s: Schema) => {
+  const fail = (e: any) => app.toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e?.message || e)));
+  const saveSchema = async (given: Schema) => {
+    // a property that changed type: this row's value is converted with it (the other rows: see DatabaseView)
+    const s = withOptionsFor([page as any], schema, given, () => newId());
+    const mine = changedPropValues([page as any], schema, s).find((m) => m.id === page.id);
     setSchema(s);
-    await api.post(`/api/pages/${dbId}`, { schema: s });
-    announce(dbId);
+    if (mine) onPage({ ...page, props: { ...page.props, ...mine.props } });
+    try {
+      await api.post(`/api/pages/${dbId}`, { schema: s });
+      if (mine) await api.post(`/api/pages/${page.id}`, { props: mine.props });
+      announce(dbId);
+    } catch (e) { fail(e); }
   };
   const row = { ...page, props: page.props, cover: page.cover, has_content: true, preview: "" } as any;
   const setVal = async (p: Property, v: any) => {
     onPage({ ...page, props: { ...page.props, [p.id]: v } });
-    const res = await api.post<Page>(`/api/pages/${page.id}`, { props: { [p.id]: v } });
-    onPage({ ...page, props: res.props, rev: res.rev });
-    announce(dbId);
+    try {
+      const res = await api.post<Page>(`/api/pages/${page.id}`, { props: { [p.id]: v } });
+      onPage({ ...page, props: res.props, rev: res.rev });
+      announce(dbId);
+    } catch (e) { fail(e); }
   };
   const dummyView = { id: "", name: "", type: "table" as const };
   return (

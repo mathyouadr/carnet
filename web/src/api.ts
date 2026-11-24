@@ -26,21 +26,46 @@ function call<T = any>(method: string, path: string, body?: any): Promise<T> {
   return p;
 }
 
-async function send<T = any>(method: string, path: string, body?: any): Promise<T> {
-  const res = await fetch(BASE + path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: "same-origin",
-  });
-  if (res.status === 204) return undefined as T;
-  let data: any = null;
-  try { data = await res.json(); } catch { /* empty */ }
-  if (!res.ok) {
-    if (res.status === 401 && BOOT.protected) location.reload();
-    throw new ApiError(res.status, data?.error || res.statusText, data);
+/** A request that does not answer in time fails (instead of hanging the save queue). Uploads get longer. */
+export const TIMEOUT_MS = 30_000;
+export const UPLOAD_TIMEOUT_MS = 10 * 60_000;
+
+async function timed<T>(ms: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctl = new AbortController();
+  const h = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await run(ctl.signal);
+  } catch (e: any) {
+    if (ctl.signal.aborted) throw new ApiError(0, "timeout");
+    throw e;
+  } finally {
+    clearTimeout(h);
   }
-  return data as T;
+}
+
+async function send<T = any>(method: string, path: string, body?: any): Promise<T> {
+  return timed(TIMEOUT_MS, async (signal) => {
+    let res: Response;
+    try {
+      res = await fetch(BASE + path, {
+        method,
+        headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        credentials: "same-origin",
+        signal,
+      });
+    } catch (e: any) {
+      throw new ApiError(0, e?.message || "network error");     // status 0: no answer from the server
+    }
+    if (res.status === 204) return undefined as T;
+    let data: any = null;
+    try { data = await res.json(); } catch { /* empty */ }
+    if (!res.ok) {
+      if (res.status === 401 && BOOT.protected) location.reload();
+      throw new ApiError(res.status, data?.error || res.statusText, data);
+    }
+    return data as T;
+  });
 }
 
 export const api = {
@@ -48,25 +73,36 @@ export const api = {
   post: <T = any>(p: string, b: any = {}) => call<T>("POST", p, b),
   del: <T = any>(p: string, b?: any) => call<T>("DELETE", p, b),
   async upload(file: File | Blob, name: string, pageId?: string): Promise<{ url: string }> {
-    const res = await fetch(BASE + "/api/files", {
-      method: "POST", body: file, credentials: "same-origin",
-      headers: { "X-Carnet-Upload": "1", "X-Filename": encodeURIComponent(name), "Content-Type": (file as File).type || "application/octet-stream", ...(pageId ? { "X-Page-Id": pageId } : {}) },
+    return timed(UPLOAD_TIMEOUT_MS, async (signal) => {
+      const res = await fetch(BASE + "/api/files", {
+        method: "POST", body: file, credentials: "same-origin", signal,
+        headers: { "X-Carnet-Upload": "1", "X-Filename": encodeURIComponent(name), "Content-Type": (file as File).type || "application/octet-stream", ...(pageId ? { "X-Page-Id": pageId } : {}) },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new ApiError(res.status, data.error || "upload failed");
+      return data;
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(res.status, data.error || "upload failed");
-    return data;
   },
   async importFile(file: File, parentId: string | null, databases: boolean) {
     const q = new URLSearchParams();
     if (parentId) q.set("parent_id", parentId);
     if (!databases) q.set("databases", "0");
-    const res = await fetch(BASE + "/api/import?" + q, {
-      method: "POST", body: file, credentials: "same-origin",
-      headers: { "X-Carnet-Upload": "1", "X-Filename": encodeURIComponent(file.name), "Content-Type": "application/octet-stream" },
+    return timed(UPLOAD_TIMEOUT_MS, async (signal) => {
+      const res = await fetch(BASE + "/api/import?" + q, {
+        method: "POST", body: file, credentials: "same-origin", signal,
+        headers: { "X-Carnet-Upload": "1", "X-Filename": encodeURIComponent(file.name), "Content-Type": "application/octet-stream" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new ApiError(res.status, data.error || "import failed");
+      return data;
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(res.status, data.error || "import failed");
-    return data;
+  },
+  /** A save sent as the page closes: keepalive lets the browser finish it after the unload. Bypasses the queue. */
+  postKeepalive(path: string, body: any): void {
+    fetch(BASE + path, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      credentials: "same-origin", keepalive: true,
+    }).catch(() => undefined);
   },
 };
 
