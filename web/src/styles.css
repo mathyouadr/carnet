@@ -630,3 +630,18 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-editor [data-content-type="codeBlock"]:hover select, .cn-editor [data-content-type="codeBlock"] select:focus { opacity: 1 !important; }
 .cn-editor [data-content-type="codeBlock"] select option { color: #000; }
 .cn-card, .cn-node { -webkit-touch-callout: none; }
+
+/* ---- file attachment card */
+.cn-file { width: 100%; }
+.cn-file-row { display: flex; align-items: center; gap: 4px; border: 1px solid var(--cn-line); border-radius: 10px; background: var(--cn-bg-2); padding: 6px 6px 6px 8px; }
+.cn-file-row:hover { background: var(--cn-hover, var(--cn-bg-2)); }
+.cn-file-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; padding: 2px; }
+.cn-file-badge { flex: none; width: 40px; height: 40px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.cn-file-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cn-file-name { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cn-file-meta { font-size: 12.5px; color: var(--cn-fg-3); }
+.cn-file-btn { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--cn-fg-2, inherit); cursor: pointer; text-decoration: none; }
+.cn-file-btn:hover { background: var(--cn-line); }
+.cn-file-pdf { width: 100%; height: 520px; border: 1px solid var(--cn-line); border-radius: 10px; margin-top: 6px; background: #fff; }
+@media print { .cn-file-btn { display: none; } .cn-file-pdf { display: none; } .cn-file-row { break-inside: avoid; } }
+.bn-file-block-content-wrapper:has(.cn-file) { width: 100%; }

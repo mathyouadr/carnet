@@ -11,6 +11,7 @@ import { fileUrl } from "../api";
 import { safeEmbed } from "../safe";
 import { Popover } from "../ui/Popover";
 import { EmojiPicker } from "../ui/Pickers";
+import { FileBlock } from "./FileBlock";
 import { DatabaseView } from "../db/DatabaseView";
 import { FileText, ArrowUpRight, Table2 } from "lucide-react";
 
@@ -269,6 +270,7 @@ export const schema = withMultiColumn(BlockNoteSchema.create({
     database: DatabaseBlock(),
     embed: EmbedBlock(),
     toc: TocBlock(),
+    file: FileBlock(),
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
