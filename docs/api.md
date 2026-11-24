@@ -90,6 +90,23 @@ and key are never sent to the browser.
 `continue`, a few related notes found by search are added to the prompt.
 
 Events, in order: `data: {"selection_md": "..."}` (the selection as the AI saw it, for diffs), `data: {"delta": "..."}`
-repeated, then `data: {"done": true}` **or** `data: {"error": "..."}`. Lines starting with `:` are keepalives.
-Errors before the stream starts are plain JSON: 400 (bad command / body), 403 (Markdown-folder or trashed page,
-cross-site), 404 (unknown page), 413 (body over 1 MB).
+repeated, then `data: {"done": true}` **or** `data: {"error": CODE}` (optionally with `"status"`). Lines starting with `:`
+are keepalives, sent every 15 s while the model is silent. The answer is only complete after `done`.
+
+Error codes (English, stable; the UI translates them): `upstream_http` (+ `status`), `unreachable`, `interrupted`
+(stream cut), `truncated` (the model stopped at its length limit: not a complete answer), `filtered`, `malformed`
+(non-JSON data from the model), `upstream_error`, `deadline` (total time over `CARNET_AI_DEADLINE`). Upstream text is
+never sent to the browser.
+
+Errors before the stream starts are plain JSON `{"error": CODE}`: 400 `invalid_request` / `invalid_body`,
+403 `read_only` (Markdown-folder page) or `in_trash`, 404 `not_found`, 413 `too_large` (body over 1 MB, or
+`selection_too_long`: a rewrite command over 20 000 characters, refused before the model is called; insert-only
+commands get the clipped selection), 415 (not JSON), 429 `too_many_requests` (more than `CARNET_AI_MAX_CONCURRENT`
+requests running; `Retry-After: 5`).
+
+Limits: the conversation sent is the newest 8 messages, 4 000 characters each. The model's context gets at most 12 000
+characters around the selection (60 000 for whole-page commands), and up to 5 related notes for `custom` / `continue`.
+
+Environment: `CARNET_AI_TIMEOUT` (seconds without data from the model, default 120), `CARNET_AI_DEADLINE` (total seconds
+for one answer, default 180), `CARNET_AI_MAX_CONCURRENT` (simultaneous answers, default 4).
+
