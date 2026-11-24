@@ -2,6 +2,7 @@
 
 Pages
   GET    /api/bootstrap                     app info, settings and the page tree (no contents)
+  GET    /api/graph                         graph view: pages (nodes) and links between them (edges)
   GET    /api/pages?parent_id=&q=           live pages (summaries), optionally under a parent
   POST   /api/pages                         create {title, parent_id, kind, content | markdown, props, icon, ...}
   GET    /api/pages/{id}                    one page with content, props, rows (database), backlinks, path
@@ -59,6 +60,7 @@ class API:
         self.routes = []
         r = self.route
         r("GET", "/api/bootstrap", self.bootstrap)
+        r("GET", "/api/graph", self.graph)
         r("GET", "/api/pages", self.list_pages)
         r("POST", "/api/pages", lambda b, q: self.s.create(b))
         r("GET", f"/api/pages/{ID}", self.get_page)
@@ -121,6 +123,25 @@ class API:
     def bootstrap(self, b, q):
         info = self.app.info() if self.app else {"version": __version__}
         return {"info": info, "settings": self.s.settings(), "tree": self.tree()}
+
+    def graph(self, b, q):
+        """Nodes = live pages (no templates, no database rows); edges = mentions / links, plus the parent tree."""
+        tree = [p for p in self.tree() if not p["is_template"] and not p.get("is_row")]
+        ids = {p["id"] for p in tree}
+        nodes = [{"id": p["id"], "title": p["title"], "icon": p["icon"], "kind": p["kind"],
+                  "parent_id": p["parent_id"] if p["parent_id"] in ids else None,
+                  "readonly": bool(p.get("readonly"))} for p in tree]
+        links = set()
+        for r in self.s.q("SELECT src, dst FROM links"):
+            if r["src"] in ids and r["dst"] in ids:
+                links.add((r["src"], r["dst"]))
+        if self.md:
+            for p in tree:
+                if p.get("readonly"):
+                    for dst in self.md.refs(p["id"]):
+                        if dst in ids and dst != p["id"]:
+                            links.add((p["id"], dst))
+        return {"nodes": nodes, "links": [{"source": a, "target": b_} for a, b_ in sorted(links)]}
 
     def list_pages(self, b, q):
         tree = self.tree()

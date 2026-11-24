@@ -7,6 +7,7 @@ import { api, BASE, BOOT, Page } from "../api";
 import { AppProvider, pagePath, useApp } from "./store";
 import { Sidebar } from "./Sidebar";
 import { printPage } from "./print";
+import { GraphView } from "./GraphView";
 import { HistoryModal, Login, MoveDialog, SearchPalette, SettingsModal, TemplatesPanel, TrashPanel } from "./Dialogs";
 import { PageView } from "../page/PageView";
 import { relTime, t } from "../i18n";
@@ -284,6 +285,7 @@ function Main() {
       )}
       <Peek />
       <Toasts />
+      {app.graphOpen && <GraphView onClose={() => app.setGraphOpen(false)} />}
       {app.searchOpen && <SearchPalette onClose={() => app.setSearchOpen(false)} />}
       {trash && <Popover anchor={trash} onClose={() => setTrash(null)} width={380} placement="right-start"><TrashPanel onClose={() => setTrash(null)} /></Popover>}
       {tpl && <Popover anchor={tpl} onClose={() => setTpl(null)} width={340} placement="right-start"><TemplatesPanel onClose={() => setTpl(null)} /></Popover>}

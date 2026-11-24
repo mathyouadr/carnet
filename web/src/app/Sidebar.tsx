@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronRight, ChevronsLeft, Plus, Search, Trash2, Settings, MoreHorizontal, FileText,
+  ChevronRight, Network, ChevronsLeft, Plus, Search, Trash2, Settings, MoreHorizontal, FileText,
   Table2, LayoutTemplate, SquarePen,
 } from "lucide-react";
 import { api, BOOT, Summary } from "../api";
@@ -130,6 +130,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
       </div>
       <div className="cn-side-nav">
         <button type="button" className="cn-side-item" onClick={() => { if (app.mobile) app.setSidebar(false); app.setSearchOpen(true); }}><Search size={16} /> <span>{t("Search")}</span>{!app.mobile && <kbd>Ctrl K</kbd>}</button>
+        <button type="button" className="cn-side-item" onClick={() => { if (app.mobile) app.setSidebar(false); app.setGraphOpen(true); }}><Network size={16} /> <span>{t("Graph view")}</span></button>
       </div>
       <div className="cn-side-scroll" onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null); }}>
         {favs.length > 0 && (

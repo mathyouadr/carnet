@@ -35,6 +35,8 @@ type Ctx = {
   sidebar: boolean;
   setSidebar: (v: boolean) => void;
   searchOpen: boolean;
+  graphOpen: boolean;
+  setGraphOpen: (v: boolean) => void;
   setSearchOpen: (v: boolean) => void;
   mobile: boolean;
   titleOf: (id: string) => string;
@@ -99,6 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useKeyboardFlag(mobile);
   const [sidebar, setSidebarState] = useState(() => !matchMedia("(max-width: 760px)").matches && localStorage.getItem("carnet:sidebar") !== "0");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const toastId = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -196,7 +199,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     tree, byId, children: (id) => kids.get(id) || [], settings, refresh, patchTree, pageId: route.pageId, navigate,
-    peek, setPeek, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen,
+    peek, setPeek, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen, graphOpen, setGraphOpen,
     mobile, titleOf,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

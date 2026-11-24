@@ -757,3 +757,13 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
   .cn-mode-toggle svg { stroke-width: 2.3; }
   .cn-top { border-bottom: 1px solid var(--cn-line); }
 }
+
+/* graph view */
+.cn-graph { position: fixed; inset: 0; z-index: 60; background: var(--cn-bg); display: flex; flex-direction: column; }
+.cn-graph-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid var(--cn-line); flex-wrap: wrap; }
+.cn-graph-bar .cn-input { width: 180px; flex: 0 1 180px; }
+.cn-graph-bar .cn-icon-btn { margin-left: auto; }
+.cn-graph-count { color: var(--cn-fg-3); font-size: 13px; }
+.cn-graph-chk { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--cn-fg-2); }
+.cn-graph-cv { flex: 1; width: 100%; min-height: 0; touch-action: none; cursor: grab; }
+.cn-graph-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--cn-fg-3); pointer-events: none; }
