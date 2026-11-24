@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ImagePlus, Smile, ChevronRight, FileText, Plus, Link2 } from "lucide-react";
 import { api, Page, Property, Schema } from "../api";
-import { useApp } from "../app/store";
+import { pagePath, useApp } from "../app/store";
 import { relTime, t } from "../i18n";
 import { Popover } from "../ui/Popover";
 import { CoverPicker, coverStyle, EmojiPicker, GRADIENTS } from "../ui/Pickers";
@@ -244,11 +244,16 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
           </div>
         )}
         {page.backlinks.length > 0 && (
-          <details className="cn-backlinks">
+          <details className="cn-backlinks" open>
             <summary><Link2 size={14} /> {t("Backlinks")} ({page.backlinks.length})</summary>
             {page.backlinks.map((b) => (
-              <a key={b.id} className="cn-backlink" onClick={() => app.navigate(b.id)}>
-                <span>{b.icon || "📄"}</span> {b.title || t("Untitled")} <ChevronRight size={13} />
+              <a key={b.id} className="cn-backlink" href={pagePath(b.id)} onClick={(e) => { e.preventDefault(); app.navigate(b.id); }}>
+                <span className="ic">{b.icon || <FileText size={16} />}</span>
+                <span className="bd">
+                  <span className="ti">{b.title || t("Untitled")}</span>
+                  {b.snippet && <span className="sn">{b.snippet}</span>}
+                </span>
+                <ChevronRight size={13} />
               </a>
             ))}
           </details>

@@ -145,5 +145,5 @@ export type Page = Summary & {
   trashed_at: string | null; in_trash: boolean; path: { id: string; title: string; icon: string; kind: string }[];
   schema?: Schema; views?: View[]; rows?: Row[];
   database?: { id: string; title: string; icon: string; schema: Schema };
-  backlinks: Summary[]; children: Summary[];
+  backlinks: (Summary & { snippet?: string })[]; children: Summary[];
 };

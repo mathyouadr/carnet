@@ -60,6 +60,19 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(restored["content"][0]["content"][0]["text"], "hello")
         self.assertGreater(restored["rev"], p2["rev"])
 
+    def test_backlink_snippet(self):
+        a = self.s.create({"title": "OSPF"})
+        mention = {"type": "pageMention", "props": {"pageId": a["id"], "title": "OSPF"}}
+        text = lambda x: {"type": "text", "text": x, "styles": {}}
+        self.s.create({"title": "Révisions", "content": [
+            {"type": "paragraph", "content": [text("Rien ici")]},
+            {"type": "bulletListItem", "content": [text("Voir "), mention, text(" avant le DS " + "x" * 200)], "children": []}]})
+        bl = self.s.page(a["id"])["backlinks"]
+        self.assertEqual(len(bl), 1)
+        self.assertTrue(bl[0]["snippet"].startswith("Voir"))
+        self.assertNotIn("Rien ici", bl[0]["snippet"])
+        self.assertLessEqual(len(bl[0]["snippet"]), 140)
+
     def test_search_backlinks_duplicate(self):
         a = self.s.create({"title": "Réseaux", "markdown": "Le protocole OSPF est un protocole de routage"})
         b = self.s.create({"title": "Index", "content": [{"type": "paragraph", "content": [

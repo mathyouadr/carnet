@@ -910,3 +910,27 @@ def page_refs(blocks, mentions_only=False) -> set[str]:
 
     walk(blocks)
     return refs
+
+
+def ref_snippet(blocks, dst: str, limit: int = 140) -> str:
+    """The text of the first block that points to page `dst` (a mention or a sub-page block), shortened."""
+    def points_here(b) -> bool:
+        if (b.get("type") in ("pageMention", "pageLink") and (b.get("props") or {}).get("pageId") == dst):
+            return True
+        c = b.get("content")
+        return isinstance(c, list) and any(isinstance(i, dict) and points_here(i) for i in c)
+
+    def walk(bs):
+        for b in bs if isinstance(bs, list) else []:
+            if not isinstance(b, dict):
+                continue
+            if points_here(b):
+                flat = " ".join(to_text([{**b, "children": []}]).split())
+                return flat
+            found = walk(b.get("children"))
+            if found is not None:
+                return found
+        return None
+
+    text = walk(blocks) or ""
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"

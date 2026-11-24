@@ -263,7 +263,7 @@ class Store:
             d["database"] = {"id": parent["id"], "title": parent["title"], "icon": parent["icon"],
                              "schema": self.schema_of(parent)}
         alive = self.alive_ids()
-        d["backlinks"] = [self.summary(b) for b in self.q(
+        d["backlinks"] = [{**self.summary(b), "snippet": md.ref_snippet(_loads(b["content"], []), pid)} for b in self.q(
             "SELECT p.* FROM links l JOIN pages p ON p.id = l.src WHERE l.dst=? AND l.src<>? ORDER BY p.title",
             (pid, pid)) if b["id"] in alive]
         d["children"] = [dict(self.summary(c)) for c in self.q(
