@@ -748,3 +748,12 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
   .cn-edit-fab svg { width: 20px; height: 20px; }
   .cn-app .cn-ai-fab { width: 40px; height: 40px; right: 19px !important; bottom: calc(74px + var(--cn-bottom)); }
 }
+/* phone top bar: full-contrast icons and title (grey 28 px icons read as blurred on the iPhone) */
+@media (max-width: 760px) {
+  .cn-top .cn-icon-btn { color: var(--cn-fg); }
+  .cn-top .cn-icon-btn svg { stroke-width: 2.3; }
+  .cn-crumb a { color: var(--cn-fg); font-weight: 600; font-size: 15px; }
+  .cn-mode-toggle { color: var(--cn-fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--cn-line-2); }
+  .cn-mode-toggle svg { stroke-width: 2.3; }
+  .cn-top { border-bottom: 1px solid var(--cn-line); }
+}
