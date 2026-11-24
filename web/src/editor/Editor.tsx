@@ -87,18 +87,26 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   const aiOn = aiAvailable && editable;
   const [ai, setAI] = useState<{ blockIds: string[]; hasSelection: boolean } | null>(null);
   useEffect(() => setAI(null), [page.id]);               // a menu belongs to the page it was opened on
-  const openAI = useCallback(() => {
+  // scope "page": the whole page (toolbar button); "here": the block under the cursor (/ia); default: selection, else cursor
+  const openAI = useCallback((scope?: "page" | "here") => {
     const sel = editor.getSelection();
     const ids: string[] = (sel?.blocks || []).map((b: any) => b.id);
     if (ids.length) return setAI({ blockIds: ids, hasSelection: true });
-    setAI({ blockIds: [editor.getTextCursorPosition().block.id], hasSelection: false });
+    const cur = editor.getTextCursorPosition().block;
+    const filled = (b: any) => !Array.isArray(b.content) || b.content.length > 0 || (b.children || []).length > 0;
+    if (scope === "page") {
+      const all: any[] = editor.document;
+      if (all.length > 1 || (all[0] && filled(all[0]))) return setAI({ blockIds: all.map((b) => b.id), hasSelection: true });
+    }
+    if (scope === "here" && filled(cur)) return setAI({ blockIds: [cur.id], hasSelection: true });
+    setAI({ blockIds: [cur.id], hasSelection: false });
   }, [editor]);
 
   // Mobile reading mode: the AI button switches to edit mode, and the menu opens once the page is editable
   useEffect(() => {
     if (!aiOn || sessionStorage.getItem("carnet:ai-open") !== page.id) return;
     sessionStorage.removeItem("carnet:ai-open");
-    const timer = setTimeout(openAI, 60);
+    const timer = setTimeout(() => openAI("page"), 60);
     return () => clearTimeout(timer);
   }, [aiOn, page.id, openAI]);
 
@@ -291,7 +299,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       title: t("Ask {name}").replace("{name}", aiName()), subtext: t("Write, edit, summarize…"), group: t("AI"),
       aliases: ["ai", "ia", "assistant", "hermes", aiName().toLowerCase()],
       icon: <Sparkles size={18} />,
-      onItemClick: () => setTimeout(openAI, 0),
+      onItemClick: () => setTimeout(() => openAI("here"), 0),
     }] : [];
     const defaults = getDefaultReactSlashMenuItems(editor);
     return filterSuggestionItems([...aiItems, ...combineByGroup(defaults, getMultiColumnSlashMenuItems(editor), custom as any)] as any, query) as any;
@@ -320,7 +328,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   return (
     <div ref={host} className={`cn-editor ${editable ? "edit" : "read"}`}>
       <BlockSelectLayer rects={bsel.rects} box={bsel.box} />
-      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? openAI : undefined} />}
+      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? () => openAI("page") : undefined} />}
       <BlockNoteView editor={editor} editable={editable} theme={theme} onChange={() => onChange(editor.document as any[])}
         slashMenu={false} formattingToolbar={!app.mobile && !aiOn} sideMenu={editable && !app.mobile} emojiPicker>
         {aiOn && !app.mobile && (
