@@ -16,7 +16,7 @@ export function PageMenu({ page, anchor, onClose }: { page: Summary; anchor: Men
   if (move) return <MoveDialog page={page} onClose={onClose} />;
   return (
     <Popover anchor={anchor} onClose={onClose} width={240}>
-      <MenuItem icon={<ExternalLink size={15} />} onClick={() => { app.navigate(page.id); onClose(); }}>{t("Open")}</MenuItem>
+      {app.pageId !== page.id && <MenuItem icon={<ExternalLink size={15} />} onClick={() => { app.navigate(page.id); onClose(); }}>{t("Open")}</MenuItem>}
       {page.readonly ? (
         <MenuItem icon={<Link2 size={15} />} onClick={() => { link(); onClose(); }}>{t("Copy link")}</MenuItem>
       ) : <>
