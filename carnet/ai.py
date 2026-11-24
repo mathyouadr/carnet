@@ -31,7 +31,7 @@ COMMANDS: dict[str, str] = {
     "continue": "Continue writing from the end of the selected text (or the page), in the same style.",
     "summarize_page": "Summarize the page.",
     "action_items": "List the action items found in the page, as a to-do list (- [ ] ...).",
-    "custom": "Do what the user asks below.",
+    "custom": "Do what the user asks below. If a selection is given and the request is to change it (rewrite, reformulate, correct, reorganise, remove or add something…), answer with the complete new version of the selected text, ready to replace it, not only the changes.",
 }
 
 # commands whose answer replaces the selection (the others are inserted)

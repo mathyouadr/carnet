@@ -126,7 +126,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   };
 
   /** `rewrite`: the answer replaces the selection (diff + Replace); follow-ups keep the mode of the first command. */
-  const run = async (command: string, prompt = "", history: AIMessage[] = [], rewrite = REWRITE.has(command)) => {
+  const run = async (command: string, prompt = "", history: AIMessage[] = [], rewrite = REWRITE.has(command) || (command === "custom" && hasSelection)) => {
     ctrl.current?.abort();
     const c = new AbortController();
     ctrl.current = c;
