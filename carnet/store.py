@@ -292,10 +292,25 @@ class Store:
         row = self.q1("SELECT MAX(position) AS m FROM pages WHERE parent_id IS ?", (parent_id,))
         return (row["m"] if row and row["m"] is not None else -1) + 1
 
+    def _in_trash(self, pid) -> bool:
+        """True when the page or one of its ancestors is in the trash."""
+        cur, seen = pid, set()
+        while cur and cur not in seen and len(seen) < 200:
+            seen.add(cur)
+            r = self.q1("SELECT parent_id, trashed_at FROM pages WHERE id=?", (cur,))
+            if r is None:
+                return False
+            if r["trashed_at"]:
+                return True
+            cur = r["parent_id"]
+        return False
+
     def _check_parent(self, parent_id, pid=None):
         if parent_id is None:
             return None
         p = self._row(parent_id)
+        if self._in_trash(parent_id):             # a page there would be invisible: refuse it
+            raise Invalid("the parent page is in the trash")
         if pid:                                   # refuse cycles: the new parent can't be inside the page
             cur, seen = p, set()
             while cur is not None:
