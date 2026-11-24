@@ -418,7 +418,10 @@ class Handler(BaseHTTPRequestHandler):
                 pid = path.split("/")[3]
                 try:
                     text = self.app.api.page_markdown(pid)
-                    title = self.app.store.page(pid, with_rows=False)["title"] or "Untitled"
+                    if self.app.folders.has(pid):                   # a Markdown-folder page: not in the store
+                        title = self.app.folders.page(pid)["title"] or "Untitled"
+                    else:
+                        title = self.app.store.page(pid, with_rows=False)["title"] or "Untitled"
                 except NotFound:
                     return self.json(404, {"error": "not found"})
                 return self.send(200, text, ctype="text/markdown; charset=utf-8", headers={
