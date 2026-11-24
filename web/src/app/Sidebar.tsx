@@ -1,13 +1,12 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronRight, ChevronsLeft, Plus, Search, Trash2, Settings, MoreHorizontal, Star, StarOff, Copy, FileText,
-  Table2, LayoutTemplate, SquarePen, CornerUpRight, Link2,
+  ChevronRight, ChevronsLeft, Plus, Search, Trash2, Settings, MoreHorizontal, FileText,
+  Table2, LayoutTemplate, SquarePen,
 } from "lucide-react";
 import { api, BOOT, Summary } from "../api";
 import { pagePath, useApp } from "./store";
 import { t } from "../i18n";
-import { MenuItem, MenuSep, Popover } from "../ui/Popover";
-import { MoveDialog } from "./Dialogs";
+import { PageMenu, MenuAnchor, useContextTrigger } from "./PageMenu";
 
 const EXP_KEY = "carnet:expanded";
 
@@ -27,8 +26,7 @@ type DropPos = { id: string; where: "before" | "inside" | "after" } | null;
 export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: React.MouseEvent) => void; onSettings: () => void; onTemplates: (e: React.MouseEvent) => void }) {
   const app = useApp();
   const exp = useExpanded();
-  const [menu, setMenu] = useState<{ el: HTMLElement; p: Summary } | null>(null);
-  const [move, setMove] = useState<Summary | null>(null);
+  const [menu, setMenu] = useState<{ el: MenuAnchor; p: Summary } | null>(null);
   const [drop, setDrop] = useState<DropPos>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const roots = app.children(null).filter((p) => !p.is_template && !p.readonly);
@@ -73,6 +71,10 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
     } catch (err: any) { app.toast(String(err.message)); }
   };
 
+  const ctxOpen = useRef<Summary | null>(null);
+  const ctxT = useContextTrigger((at) => ctxOpen.current && setMenu({ el: at, p: ctxOpen.current }));
+  const ctx = (p: Summary) => ({ ...ctxT, onContextMenu: (e: React.MouseEvent) => { ctxOpen.current = p; ctxT.onContextMenu(e); }, onTouchStart: (e: React.TouchEvent) => { ctxOpen.current = p; ctxT.onTouchStart(e); } });
+
   const renderNode = (p: Summary, depth: number): React.ReactNode => {
     const kids = app.children(p.id).filter((c) => !c.is_template);
     const open = exp.has(p.id);
@@ -98,6 +100,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
             if (drop?.id !== p.id || drop.where !== where) setDrop({ id: p.id, where });
           }}
           onDrop={onDrop}
+          {...ctx(p)}
           onClick={() => app.navigate(p.id)}>
           {kids.length ? (
             <button type="button" className={`cn-node-tog ${open ? "open" : ""}`} onClick={(e) => { e.stopPropagation(); exp.toggle(p.id); }}>
@@ -133,7 +136,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           <div className="cn-side-sec">
             <div className="cn-side-label">{t("Favorites")}</div>
             {favs.map((p) => (
-              <div key={"f" + p.id} className={`cn-node ${app.pageId === p.id ? "active" : ""}`} style={{ paddingLeft: 6 }} onClick={() => app.navigate(p.id)}>
+              <div key={"f" + p.id} className={`cn-node ${app.pageId === p.id ? "active" : ""}`} style={{ paddingLeft: 6 }} {...ctx(p)} onClick={() => app.navigate(p.id)}>
                 <span className="cn-node-tog ph" />
                 <span className="cn-node-ic">{p.icon || <FileText size={15} />}</span>
                 <span className="cn-node-tx">{p.title || t("Untitled")}</span>
@@ -160,35 +163,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
         <button type="button" className="cn-side-item" onClick={onTrash}><Trash2 size={16} /> <span>{t("Trash")}</span></button>
         <button type="button" className="cn-side-item" onClick={onSettings}><Settings size={16} /> <span>{t("Settings")}</span></button>
       </div>
-      {menu && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} width={240}>
-          {menu.p.readonly ? (
-            <MenuItem icon={<Link2 size={15} />} onClick={() => {
-              navigator.clipboard?.writeText(location.origin + pagePath(menu.p.id)).then(() => app.toast(t("Link copied")));
-              setMenu(null);
-            }}>{t("Copy link")}</MenuItem>
-          ) : <>
-          <MenuItem icon={menu.p.favorite ? <StarOff size={15} /> : <Star size={15} />} onClick={async () => {
-            setMenu(null);
-            try { await api.post(`/api/pages/${menu.p.id}`, { favorite: !menu.p.favorite }); await app.refresh(); }
-            catch (e: any) { app.toast(String(e?.message)); }
-          }}>{menu.p.favorite ? t("Remove from favorites") : t("Add to favorites")}</MenuItem>
-          <MenuItem icon={<Link2 size={15} />} onClick={() => {
-            navigator.clipboard?.writeText(location.origin + pagePath(menu.p.id)).then(() => app.toast(t("Link copied")));
-            setMenu(null);
-          }}>{t("Copy link")}</MenuItem>
-          <MenuItem icon={<Copy size={15} />} onClick={async () => {
-            setMenu(null);
-            try { const c = await api.post(`/api/pages/${menu.p.id}/duplicate`); await app.refresh(); app.navigate(c.id); }
-            catch (e: any) { app.toast(String(e?.message)); }
-          }}>{t("Duplicate")}</MenuItem>
-          <MenuItem icon={<CornerUpRight size={15} />} onClick={() => { setMove(menu.p); setMenu(null); }}>{t("Move to")}</MenuItem>
-          <MenuSep />
-          <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { app.trashPage(menu.p.id); setMenu(null); }}>{t("Move to trash")}</MenuItem>
-          </>}
-        </Popover>
-      )}
-      {move && <MoveDialog page={move} onClose={() => setMove(null)} />}
+      {menu && <PageMenu page={menu.p} anchor={menu.el} onClose={() => setMenu(null)} />}
     </aside>
   );
 }

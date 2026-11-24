@@ -629,3 +629,4 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-editor [data-content-type="codeBlock"] select { opacity: .7 !important; pointer-events: auto; cursor: pointer; color: inherit; background: transparent; border: 0; font-size: 12px; padding: 2px 4px; }
 .cn-editor [data-content-type="codeBlock"]:hover select, .cn-editor [data-content-type="codeBlock"] select:focus { opacity: 1 !important; }
 .cn-editor [data-content-type="codeBlock"] select option { color: #000; }
+.cn-card, .cn-node { -webkit-touch-callout: none; }

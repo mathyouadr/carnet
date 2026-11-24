@@ -5,6 +5,7 @@ const FR: Record<string, string> = {
   "Add a page": "Ajouter une page", "Add a sub-page": "Ajouter une sous-page", "No pages inside": "Aucune page à l'intérieur",
   "Edit": "Édition", "Read": "Lecture", "Editing": "Édition", "Reading": "Lecture",
   "Add to favorites": "Ajouter aux favoris", "Remove from favorites": "Retirer des favoris",
+  "Turn into": "Transformer en", "Move up": "Monter", "Move down": "Descendre",
   "Duplicate": "Dupliquer", "Move to": "Déplacer vers", "Delete": "Supprimer", "Move to trash": "Mettre à la corbeille",
   "Page history": "Historique de la page", "Export as Markdown": "Exporter en Markdown", "Export as PDF": "Exporter en PDF",
   "Export as CSV": "Exporter en CSV", "Full width": "Pleine largeur", "Small text": "Petit texte", "Font": "Police",

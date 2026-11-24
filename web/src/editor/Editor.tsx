@@ -18,6 +18,7 @@ import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
+import { BlockMenu } from "./BlockMenu";
 import { useTheme } from "../app/theme";
 
 /** ✨ in BlockNote's selection toolbar (desktop). */
@@ -98,6 +99,42 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     const timer = setTimeout(openAI, 60);
     return () => clearTimeout(timer);
   }, [aiOn, page.id, openAI]);
+
+  // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
+  const [blockMenu, setBlockMenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  useEffect(() => {
+    const el = host.current;
+    if (!el || !editable) return;
+    const area = (el.closest(".cn-scroll") as HTMLElement) || el;
+    const idOf = (n: Element | null) => n?.closest?.(".bn-block-outer")?.getAttribute("data-id") || n?.closest?.("[data-node-type=blockContainer]")?.getAttribute("data-id");
+    // the block under the pointer, or (margins, below the last block) the one nearest to it vertically
+    const blockAt = (y: number) => {
+      let best: Element | null = null, bd = Infinity;
+      for (const c of Array.from(el.querySelectorAll(".bn-block-content"))) {
+        const r = c.getBoundingClientRect();
+        const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+        if (d <= bd) { bd = d; best = c; }
+      }
+      return bd <= 400 ? best : null;
+    };
+    const ctx = (e: MouseEvent) => {
+      const tg = e.target as HTMLElement;
+      if (tg.closest?.("input, textarea, select, a[href], button, .cn-pop")) return;
+      if (!window.getSelection()?.isCollapsed) return;
+      let id: string | null | undefined;
+      if (tg.closest?.(".bn-editor")) id = idOf(tg);
+      if (!id) {
+        const first = el.querySelector(".bn-block-content")?.getBoundingClientRect();
+        if (!first || e.clientY < first.top) return; // title, cover, properties: browser menu
+        id = idOf(blockAt(e.clientY));
+      }
+      if (!id) return;
+      e.preventDefault();
+      setBlockMenu({ id, at: new DOMRect(e.clientX, e.clientY, 0, 0) });
+    };
+    area.addEventListener("contextmenu", ctx);
+    return () => area.removeEventListener("contextmenu", ctx);
+  }, [editable]);
 
   // Space on an empty line opens the menu (Notion). Android virtual keyboards send no space keydown: the
   // space arrives as a text input instead (beforeinput, or input when the browser does not let us cancel it).
@@ -256,6 +293,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
           <Sparkles size={16} />{t("Ask AI")}
         </button>
       )}
+      {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );

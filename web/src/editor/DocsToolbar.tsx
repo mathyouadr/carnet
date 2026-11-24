@@ -17,8 +17,8 @@ const COLOR_NAMES: Record<string, string> = {
   purple: "Purple", pink: "Pink", red: "Red",
 };
 
-type Kind = { key: string; label: string; type: string; props?: any; icon: ReactNode };
-const KINDS: Kind[] = [
+export type Kind = { key: string; label: string; type: string; props?: any; icon: ReactNode };
+export const KINDS: Kind[] = [
   { key: "p", label: "Text", type: "paragraph", icon: <span className="cn-tb-glyph">T</span> },
   { key: "h1", label: "Heading 1", type: "heading", props: { level: 1 }, icon: <span className="cn-tb-glyph">H1</span> },
   { key: "h2", label: "Heading 2", type: "heading", props: { level: 2 }, icon: <span className="cn-tb-glyph">H2</span> },
@@ -32,7 +32,7 @@ const KINDS: Kind[] = [
   { key: "code", label: "Code block", type: "codeBlock", icon: <FileCode2 size={16} /> },
 ];
 
-function kindOf(block: any): Kind {
+export function kindOf(block: any): Kind {
   if (!block) return KINDS[0];
   if (block.type === "heading") return KINDS.find((k) => k.props?.level === block.props.level) || KINDS[1];
   const OTHER: Record<string, string> = { database: "Database", pageLink: "Page", image: "Image", file: "File", video: "Video",

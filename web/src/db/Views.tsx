@@ -4,6 +4,7 @@ import type { Property, Row, Schema, View } from "../api";
 import { useApp } from "../app/store";
 import { LANG, t } from "../i18n";
 import { Popover } from "../ui/Popover";
+import { PageMenu, useContextTrigger } from "../app/PageMenu";
 import { coverStyle } from "../ui/Pickers";
 import { OpenButton, PropValue, ValueView } from "./Cell";
 import { AddProperty, PropertyMenu } from "./Menus";
@@ -129,8 +130,14 @@ function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
   const props = visibleProps(schema, view).filter((p) => p.id !== view.group_by && !isEmpty(valueOf(row, p.id, schema))
     && !(p.type === "checkbox" && !valueOf(row, p.id, schema)));
   const mode = view.card_cover || "cover";
+  const app = useApp();
+  const [menu, setMenu] = useState<DOMRect | null>(null);
+  const page = app.byId.get(row.id);
+  const ctx = useContextTrigger((at) => page && setMenu(at));
   return (
-    <div className="cn-card" onClick={open} draggable={draggable} onDragStart={onDragStart}>
+    <>
+    {menu && page && <PageMenu page={page} anchor={menu} onClose={() => setMenu(null)} />}
+    <div className="cn-card" onClick={open} draggable={draggable} onDragStart={onDragStart} {...(page ? ctx : {})}>
       {cover && mode === "cover" && row.cover && <div className="cn-card-cover" style={coverStyle(row.cover)} />}
       {cover && mode === "content" && <div className="cn-card-preview">{row.preview}</div>}
       <div className="cn-card-body">
@@ -138,6 +145,7 @@ function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
         {props.map((p) => <div key={p.id} className="cn-card-prop"><ValueView prop={p} value={valueOf(row, p.id, schema)} compact />{p.type === "checkbox" && <span className="cn-muted"> {p.name}</span>}</div>)}
       </div>
     </div>
+    </>
   );
 }
 
