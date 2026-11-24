@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import hmac
 import html
+import io
 import ipaddress
 import json
 import logging
@@ -33,16 +34,42 @@ STATIC = Path(__file__).parent / "static"
 MAX_JSON = 32 * 1024 * 1024
 MAX_AI_BODY = 1024 * 1024
 MAX_AI_MARKDOWN = 200_000
+DRAIN_EXTRA = 64 * 1024 * 1024       # a refused body is read this far past its limit so the client sees the 413
 SESSION_DAYS = 90
 SAFE_INLINE = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "application/pdf",
                "video/mp4", "video/webm", "video/ogg", "audio/mpeg", "audio/ogg", "audio/wav", "audio/mp4",
                "audio/flac", "audio/x-wav", "text/plain"}
 
 
+def parse_range(header: str, size: int):
+    """One byte range of a Range header: (start, end) inclusive, False when it can't be satisfied (416), or None
+    to send the whole file (no header, several ranges, or a syntax we don't understand)."""
+    if not header.startswith("bytes=") or "," in header:
+        return None
+    a, dash, b = header[6:].strip().partition("-")
+    if not dash or (a and not a.isdigit()) or (b and not b.isdigit()) or (not a and not b):
+        return None
+    if size == 0:
+        return False
+    if not a:                                            # the last N bytes
+        n = int(b)
+        return (max(0, size - n), size - 1) if n > 0 else False
+    start = int(a)
+    if start >= size:
+        return False
+    end = min(int(b), size - 1) if b else size - 1
+    return (start, end) if end >= start else None
+
+
+def _no_constant(name):
+    """json.loads hook: NaN / Infinity are not JSON, so they are refused instead of becoming Python floats."""
+    raise ValueError(f"{name} is not allowed in JSON")
+
+
 class App:
     def __init__(self, config: Config, store: Store | None = None):
         self.c = config
-        self.store = store or Store(config.db_path)
+        self.store = store or Store(config.db_path, files_dir=config.files_dir)
         self.folders = MdFolders(parse_spec(config.md_folders))
         self.api = API(self.store, self, self.folders)
         # the password is part of the signing key: changing it logs every session out
@@ -127,8 +154,10 @@ class Handler(BaseHTTPRequestHandler):
         log.info("%s %s", self.client_ip(), fmt % args)
 
     def client_ip(self):
+        # behind a proxy, the right-most X-Forwarded-For entry is the one the proxy itself saw; the left part is
+        # whatever the client sent and can be forged
         if self.app.c.trust_proxy and self.headers.get("X-Forwarded-For"):
-            return self.headers["X-Forwarded-For"].split(",")[0].strip()
+            return self.headers["X-Forwarded-For"].split(",")[-1].strip()
         return self.client_address[0]
 
     def send(self, status, body=b"", ctype="application/json; charset=utf-8", headers=None, cache="no-store"):
@@ -158,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def json(self, status, obj, headers=None):
-        if status >= 400 and (self.headers.get("Content-Length") or "0").strip() != "0" and not getattr(self, "_body_read", False):
+        if status >= 400 and self._has_body() and not getattr(self, "_body_read", False):
             self.close_connection = True
             headers = {**(headers or {}), "Connection": "close"}
         if obj is None:
@@ -179,53 +208,103 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return c[name].value if name in c else None
 
-    def read_raw(self, limit):
-        try:
-            n = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            raise ValueError("bad Content-Length")
-        if n < 0 or n > limit:
-            raise ValueError("too large" if n > limit else "bad Content-Length")
-        raw = self.rfile.read(n) if n else b""
-        self._body_read = True
-        return raw
+    def _has_body(self) -> bool:
+        return bool(self.headers.get("Transfer-Encoding")) or \
+            (self.headers.get("Content-Length") or "0").strip() != "0"
 
-    def read_to_file(self, limit) -> Path:
-        """Stream the request body to a private temporary file (big uploads never sit in memory). The caller
-        deletes or moves it. A refused body is drained so that the client reads the error, not a broken pipe."""
+    def _pieces(self):
+        """The request body, piece by piece: Content-Length, or Transfer-Encoding: chunked (decoded here).
+        Framing errors raise ValueError."""
+        te = (self.headers.get("Transfer-Encoding") or "").strip().lower()
+        if te:
+            if te != "chunked":
+                raise ValueError("unsupported Transfer-Encoding")
+            while True:
+                line = self.rfile.readline(1024)
+                if not line.endswith(b"\n"):
+                    raise ValueError("body cut")
+                try:
+                    size = int(line.split(b";", 1)[0].strip(), 16)
+                except ValueError:
+                    raise ValueError("bad chunk size")
+                if size < 0:
+                    raise ValueError("bad chunk size")
+                if size == 0:
+                    while True:                          # optional trailers, then the blank line
+                        trailer = self.rfile.readline(65536)
+                        if not trailer:
+                            raise ValueError("body cut")
+                        if trailer in (b"\r\n", b"\n"):
+                            return
+                left = size
+                while left > 0:
+                    chunk = self.rfile.read(min(1 << 20, left))
+                    if not chunk:
+                        raise ValueError("body cut")
+                    left -= len(chunk)
+                    yield chunk
+                if self.rfile.readline(4) not in (b"\r\n", b"\n"):
+                    raise ValueError("bad chunk framing")
         try:
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             raise ValueError("bad Content-Length")
         if n < 0:
             raise ValueError("bad Content-Length")
-        if n > limit:
-            self._drain(limit + 64 * 1024 * 1024)        # beyond that, the client gets a reset
+        left = n
+        while left > 0:
+            chunk = self.rfile.read(min(1 << 20, left))
+            if not chunk:
+                raise ValueError("body cut")
+            left -= len(chunk)
+            yield chunk
+
+    def _copy_body(self, sink, limit):
+        """Copy the request body into `sink`. Over `limit` bytes the rest is read and dropped (up to 64 MB more)
+        so that the client can read the 413 instead of a broken pipe; beyond that the connection is closed."""
+        hard = limit + DRAIN_EXTRA
+        total, refused = 0, False
+        try:
+            for piece in self._pieces():
+                total += len(piece)
+                if total > hard:
+                    raise ValueError("too large")
+                if total > limit:
+                    refused = True
+                if not refused:
+                    sink.write(piece)
+        except ValueError:
+            self.close_connection = True
+            raise
+        self._body_read = True
+        if refused:
             raise ValueError("too large")
+
+    def read_raw(self, limit):
+        sink = io.BytesIO()
+        self._copy_body(sink, limit)
+        return sink.getvalue()
+
+    def read_to_file(self, limit) -> Path:
+        """Stream the request body to a private temporary file (big uploads never sit in memory). The caller
+        deletes or moves it. A refused body is drained so that the client reads the error, not a broken pipe."""
         tmp_dir = self.app.c.data_dir / "tmp"
         tmp_dir.mkdir(parents=True, exist_ok=True)
         fd, name = tempfile.mkstemp(dir=tmp_dir, prefix="upload-")
         path = Path(name)
         try:
             with os.fdopen(fd, "wb") as out:
-                left = n
-                while left > 0:
-                    chunk = self.rfile.read(min(1 << 20, left))
-                    if not chunk:
-                        raise ValueError("body cut")
-                    out.write(chunk)
-                    left -= len(chunk)
+                self._copy_body(out, limit)
         except BaseException:
             path.unlink(missing_ok=True)
             raise
-        self._body_read = True
         return path
 
     def read_body(self):
         raw = self.read_raw(MAX_JSON)
         if not raw:
             return {}
-        data = json.loads(raw)
+        data = json.loads(raw, parse_constant=_no_constant)
         if not isinstance(data, dict):
             raise ValueError("JSON object expected")
         return data
@@ -300,6 +379,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login" and method == "POST":
             return self.login()
         if path == "/api/logout" and method == "POST":
+            if self.cross_site():
+                return self.json(403, {"error": "cross-site request refused"})
             return self.json(200, {"ok": True}, headers={"Set-Cookie": self.session_cookie("", 0)})
 
         who = self.auth()
@@ -337,7 +418,10 @@ class Handler(BaseHTTPRequestHandler):
                 pid = path.split("/")[3]
                 try:
                     text = self.app.api.page_markdown(pid)
-                    title = self.app.store.page(pid, with_rows=False)["title"] or "Untitled"
+                    if self.app.folders.has(pid):                   # a Markdown-folder page: not in the store
+                        title = self.app.folders.page(pid)["title"] or "Untitled"
+                    else:
+                        title = self.app.store.page(pid, with_rows=False)["title"] or "Untitled"
                 except NotFound:
                     return self.json(404, {"error": "not found"})
                 return self.send(200, text, ctype="text/markdown; charset=utf-8", headers={
@@ -356,6 +440,8 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     body = self.read_body()
                 except (ValueError, UnicodeDecodeError) as e:
+                    if "too large" in str(e):
+                        return self.json(413, {"error": "request body too large"})
                     return self.json(400, {"error": f"invalid body ({e})"})
             status, out = self.app.api.handle(method, path, query, body)
             return self.json(status, out)
@@ -370,33 +456,16 @@ class Handler(BaseHTTPRequestHandler):
         try:
             raw = self.read_raw(MAX_AI_BODY)
         except ValueError as e:
-            if "large" in str(e):
-                self._drain(8 * MAX_AI_BODY)        # else the client gets a broken pipe instead of the 413
-            self.json(413 if "large" in str(e) else 400, {"error": f"request refused ({e})"})
+            self.json(413 if "too large" in str(e) else 400, {"error": f"request refused ({e})"})
             return None
         try:
-            data = json.loads(raw or b"{}")
+            data = json.loads(raw or b"{}", parse_constant=_no_constant)
             if not isinstance(data, dict):
                 raise ValueError("JSON object expected")
             return data
         except (ValueError, UnicodeDecodeError) as e:
             self.json(400, {"error": f"invalid body ({e})"})
             return None
-
-    def _drain(self, limit: int):
-        """Read and drop a refused request body (up to `limit` bytes) so the client can read our answer."""
-        try:
-            left = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            return
-        if left > limit:
-            return
-        while left > 0:
-            chunk = self.rfile.read(min(65536, left))
-            if not chunk:
-                break
-            left -= len(chunk)
-        self._body_read = True
 
     def _related(self, query: str, exclude: str) -> list[dict]:
         """Up to ai.MAX_HITS notes sharing the most words with `query` (one search per significant word)."""
@@ -511,7 +580,7 @@ class Handler(BaseHTTPRequestHandler):
     def import_upload(self, query):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "import.zip")
         try:
-            data = self.read_to_file(max(self.app.c.max_upload_mb, 200) * 1024 * 1024)
+            data = self.read_to_file(self.app.c.max_import_mb * 1024 * 1024)
         except ValueError as e:
             return self.json(413 if "large" in str(e) else 400, {"error": f"import refused ({e})"})
         try:
@@ -539,11 +608,43 @@ class Handler(BaseHTTPRequestHandler):
         mime = f["mime"] or "application/octet-stream"
         inline = mime in SAFE_INLINE
         disp = ("inline" if inline else "attachment") + "; filename*=UTF-8''" + urllib.parse.quote(f["name"])
-        # uploaded HTML/SVG never runs as this site: served as a download inside a sandbox
-        self.send(200, p.read_bytes(), ctype=mime if inline else "application/octet-stream",
-                  cache="private, max-age=31536000, immutable",
-                  headers={"Content-Disposition": disp, "Content-Security-Policy": "sandbox; default-src 'none'; "
-                           "img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'"})
+        size = p.stat().st_size
+        headers = {"Content-Disposition": disp, "Accept-Ranges": "bytes",
+                   # uploaded HTML/SVG never runs as this site: served as a download inside a sandbox
+                   "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; "
+                                              "style-src 'unsafe-inline'"}
+        rng = parse_range(self.headers.get("Range") or "", size)
+        if rng is False:
+            self.send_response(416)
+            self.send_header("Content-Range", f"bytes */{size}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        start, end = rng or (0, size - 1)
+        status = 206 if rng else 200
+        if rng:
+            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        self.send_response(status)
+        self.send_header("Content-Type", mime if inline else "application/octet-stream")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Cache-Control", "private, max-age=31536000, immutable")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.end_headers()
+        if self.command == "HEAD":
+            return
+        with p.open("rb") as fh:                         # streamed: a big video is never held in memory
+            fh.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = fh.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
 
     # ------------------------------------------------------------------ pages
     def page(self, logged_in=True):

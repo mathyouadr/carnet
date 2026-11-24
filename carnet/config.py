@@ -44,6 +44,7 @@ class Config:
     trust_proxy: bool = False           # read X-Forwarded-For for logs / rate limit
     allowed_hosts: tuple = ()           # extra host names accepted without a password (anti DNS rebinding)
     max_upload_mb: int = 50
+    max_import_mb: int = 200            # size of an import (.zip / .md) in one request
     md_folders: str = ""                # "Name=/path;Other=/path": Markdown folders shown read-only
     ai_url: str = ""                    # OpenAI-compatible base URL (".../v1"); empty = no AI
     ai_key: str = ""                    # bearer for ai_url (never sent to the browser)
@@ -87,6 +88,7 @@ class Config:
             secure_cookie=_bool(e("CARNET_SECURE_COOKIE")), trust_proxy=_bool(e("CARNET_TRUST_PROXY")),
             allowed_hosts=tuple(h.strip().lower() for h in e("CARNET_ALLOWED_HOSTS", "").split(",") if h.strip()),
             max_upload_mb=int(e("CARNET_MAX_UPLOAD_MB", "50") or 50),
+            max_import_mb=int(e("CARNET_MAX_IMPORT_MB", "200") or 200),
             md_folders=e("CARNET_MD_FOLDERS", ""),
             ai_url=e("CARNET_AI_URL", "").strip().rstrip("/"), ai_key=e("CARNET_AI_KEY", "").strip(),
             ai_model=e("CARNET_AI_MODEL", "") or "hermes-agent", ai_name=e("CARNET_AI_NAME", "") or "AI",

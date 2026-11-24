@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import re
 import secrets
 import sqlite3
@@ -119,8 +120,9 @@ SUMMARY = ("id", "parent_id", "kind", "title", "icon", "position", "favorite", "
 
 
 class Store:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, files_dir: str | Path | None = None):
         self.db_file = str(path)
+        self.files_dir = Path(files_dir) if files_dir is not None else None   # uploaded bytes, removed with their page
         if self.db_file != ":memory:":
             Path(self.db_file).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.db_file, check_same_thread=False, isolation_level=None)
@@ -291,10 +293,25 @@ class Store:
         row = self.q1("SELECT MAX(position) AS m FROM pages WHERE parent_id IS ?", (parent_id,))
         return (row["m"] if row and row["m"] is not None else -1) + 1
 
+    def _in_trash(self, pid) -> bool:
+        """True when the page or one of its ancestors is in the trash."""
+        cur, seen = pid, set()
+        while cur and cur not in seen and len(seen) < 200:
+            seen.add(cur)
+            r = self.q1("SELECT parent_id, trashed_at FROM pages WHERE id=?", (cur,))
+            if r is None:
+                return False
+            if r["trashed_at"]:
+                return True
+            cur = r["parent_id"]
+        return False
+
     def _check_parent(self, parent_id, pid=None):
         if parent_id is None:
             return None
         p = self._row(parent_id)
+        if self._in_trash(parent_id):             # a page there would be invisible: refuse it
+            raise Invalid("the parent page is in the trash")
         if pid:                                   # refuse cycles: the new parent can't be inside the page
             cur, seen = p, set()
             while cur is not None:
@@ -328,7 +345,7 @@ class Store:
                                                  "type": "table"}], schema)
         props = {}
         if parent is not None and parent["kind"] == "database":
-            props = self._props_for(parent, data.get("props") or {})
+            props = self._props_for(parent_id, data.get("props") or {})
         position = data.get("position")
         if not isinstance(position, (int, float)):
             position = self._next_position(parent_id)
@@ -345,6 +362,12 @@ class Store:
         return self.page(pid)
 
     def update(self, pid, data: dict) -> dict:
+        # the revision check and the write share one transaction, under the store lock: a save made in between
+        # can't be overwritten silently
+        with self.tx():
+            return self._update(pid, data)
+
+    def _update(self, pid, data: dict) -> dict:
         r = self._row(pid)
         if "rev" in data and data["rev"] is not None and "content" in data and int(data["rev"]) != r["rev"]:
             raise Conflict(self.page(pid))
@@ -373,7 +396,7 @@ class Store:
                 raise Invalid("only database rows have properties")
             merged = {**_loads(r["props"], {}), **(data["props"] or {})} if data.get("merge_props", True) \
                 else (data["props"] or {})
-            put("props", json.dumps(self._props_for(parent, merged)))
+            put("props", json.dumps(self._props_for(r["parent_id"], merged)))
         if "schema" in data and r["kind"] == "database":
             put("schema", json.dumps(self._clean_schema(data["schema"])))
         if "views" in data and r["kind"] == "database":
@@ -419,6 +442,8 @@ class Store:
         return self.page(pid)
 
     def reorder_favorites(self, ids):
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            raise Invalid("ids must be a list of page ids")
         with self.tx():
             for i, pid in enumerate(ids):
                 self.x("UPDATE pages SET favorite=? WHERE id=? AND favorite IS NOT NULL", (i + 1, pid))
@@ -431,8 +456,11 @@ class Store:
     def restore(self, pid) -> dict:
         r = self._row(pid)
         self.x("UPDATE pages SET trashed_at=NULL WHERE id=?", (pid,))
-        if r["parent_id"] and r["parent_id"] not in self.alive_ids():
-            self.x("UPDATE pages SET parent_id=NULL, inline=0 WHERE id=?", (pid,))   # parent gone: back to the root
+        if r["parent_id"]:
+            # keep the parent, unless it is gone or is itself in the trash: then the page goes back to the root
+            parent = self.q1("SELECT trashed_at FROM pages WHERE id=?", (r["parent_id"],))
+            if parent is None or parent["trashed_at"]:
+                self.x("UPDATE pages SET parent_id=NULL, inline=0 WHERE id=?", (pid,))
         return self.page(pid)
 
     def trashed(self) -> list[dict]:
@@ -456,22 +484,52 @@ class Store:
 
     def delete_forever(self, pid):
         self._row(pid)
-        ids = [pid] + self.descendants(pid)
+        return {"ok": True, "deleted": self._purge([pid])}
+
+    def _purge(self, roots) -> int:
+        """Delete pages and everything under them, in one transaction. A root already removed by an ancestor
+        (trashed parent and child) is skipped, so a purge can't stop half way. Uploaded files that were attached
+        to these pages go too, unless a remaining page or version still refers to them. Returns the number of pages."""
+        ids, dropped = [], []
         with self.tx():
+            for root in roots:
+                if self.q1("SELECT 1 FROM pages WHERE id=?", (root,)) is None:
+                    continue
+                for i in [root] + self.descendants(root):
+                    if i not in ids:
+                        ids.append(i)
             for i in ids:
                 self.x("DELETE FROM pages WHERE id=?", (i,))
                 self.x("DELETE FROM versions WHERE page_id=?", (i,))
                 self.x("DELETE FROM links WHERE src=? OR dst=?", (i, i))
                 if self.fts:
                     self.x("DELETE FROM search WHERE id=?", (i,))
-        return {"ok": True, "deleted": len(ids)}
+            for i in ids:
+                for f in self.q("SELECT id FROM files WHERE page_id=?", (i,)):
+                    if f["id"] not in dropped and not self._referenced(f["id"]):
+                        dropped.append(f["id"])
+            for fid in dropped:
+                self.x("DELETE FROM files WHERE id=?", (fid,))
+        # the bytes go after the commit: a rollback must never leave rows pointing at missing files
+        if self.files_dir is not None:
+            for fid in dropped:
+                (self.files_dir / fid).unlink(missing_ok=True)
+        return len(ids)
+
+    def _referenced(self, fid) -> bool:
+        """Conservative: any stored text mentioning the file id counts as a reference."""
+        return bool(self.q1("SELECT 1 FROM pages WHERE instr(title || icon || cover || content || props || schema "
+                            "|| views || options, ?) > 0 LIMIT 1", (fid,))
+                    or self.q1("SELECT 1 FROM versions WHERE instr(title || icon || content || props, ?) > 0 "
+                               "LIMIT 1", (fid,)))
+
+    def empty_trash(self) -> int:
+        return self._purge([r["id"] for r in self.q("SELECT id FROM pages WHERE trashed_at IS NOT NULL")])
 
     def purge_trash(self, days=TRASH_DAYS):
         limit = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-        n = 0
-        for r in self.q("SELECT id FROM pages WHERE trashed_at IS NOT NULL AND trashed_at < ?", (limit,)):
-            n += self.delete_forever(r["id"])["deleted"]
-        return n
+        return self._purge([r["id"] for r in self.q(
+            "SELECT id FROM pages WHERE trashed_at IS NOT NULL AND trashed_at < ?", (limit,))])
 
     def duplicate(self, pid, parent_id="__same__", as_template=None, title=None) -> dict:
         """Deep copy of a page and everything under it. Links inside the copied subtree follow the copy."""
@@ -624,6 +682,8 @@ class Store:
     def _clean_content(self, content):
         if not isinstance(content, list):
             raise Invalid("content must be a list of blocks")
+        if not all(isinstance(b, dict) for b in content):
+            raise Invalid("each block must be an object")
         if len(json.dumps(content)) > 20_000_000:
             raise Invalid("page too large")
         return content
@@ -670,13 +730,17 @@ class Store:
             out.append(w)
         return out
 
-    def _props_for(self, db_row, props):
-        """Clean row values against the database schema; option names never seen before are added to it."""
-        schema = self.schema_of(db_row)
-        self._schema_dirty = False
-        out = self._clean_props(props, schema)
-        if self._schema_dirty:
-            self.x("UPDATE pages SET schema=?, updated_at=? WHERE id=?", (json.dumps(schema), now(), db_row["id"]))
+    def _props_for(self, db_id, props):
+        """Clean row values against the database schema; option names never seen before are added to it.
+        The schema is read, extended and saved in one transaction: concurrent rows must not overwrite each
+        other's new options."""
+        with self.tx():
+            db_row = self._row(db_id)
+            schema = self.schema_of(db_row)
+            before = json.dumps(schema, sort_keys=True)
+            out = self._clean_props(props, schema)
+            if json.dumps(schema, sort_keys=True) != before:
+                self.x("UPDATE pages SET schema=?, updated_at=? WHERE id=?", (json.dumps(schema), now(), db_id))
         return out
 
     def _clean_props(self, props, schema):
@@ -699,9 +763,11 @@ class Store:
             return None
         if t == "number":
             try:
-                return float(v) if not isinstance(v, bool) else None
+                f = float(v) if not isinstance(v, bool) else None
             except (TypeError, ValueError):
                 return None
+            # NaN / Infinity are not JSON: a non-finite number is treated like any other invalid number
+            return f if f is not None and math.isfinite(f) else None
         if t == "checkbox":
             return bool(v) if not isinstance(v, str) else v.lower() in ("1", "true", "yes", "oui", "x", "✓")
         if t in ("select", "status"):
@@ -740,7 +806,6 @@ class Store:
                 return o["id"]
         o = {"id": new_id(6), "name": v[:200], "color": COLORS[1 + len(opts) % (len(COLORS) - 1)]}
         opts.append(o)
-        self._schema_dirty = True
         return o["id"]
 
 

@@ -47,7 +47,8 @@ class HTTPError(Exception):
 
 
 def dumps(obj) -> str:
-    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    # allow_nan=False: a NaN/Infinity must never reach a client as invalid JSON (it raises instead)
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 class API:
@@ -150,7 +151,8 @@ class API:
         return transfer.page_markdown(self.s, pid)
 
     def search(self, b, q):
-        limit = int(q.get("limit") or 30)
+        # a limit outside 1..200 is clamped (a negative one would be a SQL 'no limit' and a slice from the end)
+        limit = min(max(int(q.get("limit") or 30), 1), 200)
         res = self.s.search(q.get("q", ""), limit)
         if self.md and q.get("q", "").strip():
             res = (res + self.md.search(q["q"], limit))[:limit]     # Carnet pages first, then Markdown notes
@@ -180,10 +182,7 @@ class API:
         return self.s.create({**b, "parent_id": pid, "kind": "page"})
 
     def empty_trash(self, b, q):
-        n = 0
-        for p in self.s.trashed():
-            n += self.s.delete_forever(p["id"])["deleted"]
-        return {"ok": True, "deleted": n}
+        return {"ok": True, "deleted": self.s.empty_trash()}
 
 
 def _matches(prop, value, wanted: str) -> bool:
