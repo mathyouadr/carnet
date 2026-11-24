@@ -56,9 +56,20 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+def _spec_keys(specs: list[tuple[str, Path]]) -> list[str]:
+    """Identity of each folder: its name, or name + absolute path when another spec already uses that name.
+    The first spec with a given name keeps the id it always had."""
+    seen, keys = set(), []
+    for name, root in specs:
+        keys.append(f"{name}\0{root.resolve()}" if name in seen else name)
+        seen.add(name)
+    return keys
+
+
 class MdFolders:
     def __init__(self, specs: list[tuple[str, Path]]):
         self.specs = [(n, p) for n, p in specs if p.is_dir()]
+        self._keys = _spec_keys(self.specs)
         self.lock = threading.RLock()
         self.pages: dict[str, dict] = {}       # id -> summary (+ _file, _dir)
         self._sig = None
@@ -104,7 +115,7 @@ class MdFolders:
                 return
             self._sig = sig
             pages = {}
-            for pos, (name, root) in enumerate(self.specs):
+            for pos, ((name, root), key) in enumerate(zip(self.specs, self._keys)):
                 root_real = root.resolve()
                 try:
                     import json
@@ -112,16 +123,17 @@ class MdFolders:
                                    (json.loads((root / ICONS_FILE).read_text(encoding="utf-8")).get("icons") or {}).items()}
                 except (OSError, ValueError, AttributeError):
                     self._icons = {}
-                rid = self.make_id(name, "")
-                pages[rid] = self._summary(rid, None, name, "", 1e6 + pos, root, directory=True, folder=name, rel="")
+                rid = self.make_id(key, "")
+                pages[rid] = self._summary(rid, None, name, "", 1e6 + pos, root, directory=True, folder=name, rel="",
+                                           ident=key)
                 dir_ids = {root: rid}
                 for d, files in self._walk(root):
                     if d != root:
                         rel = d.relative_to(root).as_posix()
-                        did = self.make_id(name, rel + "/")
+                        did = self.make_id(key, rel + "/")
                         dir_ids[d] = did
                         pages[did] = self._summary(did, dir_ids.get(d.parent, rid), d.name, "", 0, d, directory=True,
-                                                   folder=name, rel=rel)
+                                                   folder=name, rel=rel, ident=key)
                     for i, f in enumerate(files):
                         p = d / f
                         try:
@@ -132,14 +144,14 @@ class MdFolders:
                         rel = p.relative_to(root).as_posix()
                         stem = p.stem
                         if d != root and stem == d.name:           # folder note: becomes the folder page itself
-                            note = self._summary("x", None, stem, "", 0, p, folder=name, rel=rel)
-                            upd = {"_file": p, "updated_at": _iso(p.stat().st_mtime)}
+                            note = self._summary("x", None, stem, "", 0, p, folder=name, rel=rel, ident=key)
+                            upd = {"_file": p, "updated_at": note["updated_at"], "_stamp": note["_stamp"]}
                             if note["icon"] and pages[dir_ids[d]]["icon"] == "📁":
                                 upd["icon"] = note["icon"]
                             pages[dir_ids[d]].update(upd)
                             continue
-                        nid = self.make_id(name, rel)
-                        pages[nid] = self._summary(nid, dir_ids[d], stem, "", i + 1, p, folder=name, rel=rel)
+                        nid = self.make_id(key, rel)
+                        pages[nid] = self._summary(nid, dir_ids[d], stem, "", i + 1, p, folder=name, rel=rel, ident=key)
                 # order like a file explorer: folders first, then notes, by name; drop folders without any note
                 kids = {}
                 for pg in pages.values():
@@ -161,19 +173,20 @@ class MdFolders:
             for pid, pg in pages.items():
                 if pg.get("_file"):
                     rel = pg["source"]["path"]
-                    self._by_rel[(pg["source"]["folder"], _fold(rel[:-3] if rel.endswith(".md") else rel))] = pid
-                    self._by_name.setdefault((pg["source"]["folder"], _fold(Path(rel).stem)), pid)
+                    self._by_rel[(pg["_key"], _fold(rel[:-3] if rel.endswith(".md") else rel))] = pid
+                    self._by_name.setdefault((pg["_key"], _fold(Path(rel).stem)), pid)
 
-    def _summary(self, pid, parent, title, icon, position, path: Path, directory=False, folder="", rel=""):
+    def _summary(self, pid, parent, title, icon, position, path: Path, directory=False, folder="", rel="", ident=None):
         try:
-            mt = path.stat().st_mtime
+            st = path.stat()
+            mt, stamp = st.st_mtime, (st.st_mtime_ns, st.st_size)
         except OSError:
-            mt = time.time()
+            mt, stamp = time.time(), (time.time_ns(),)      # unknown: never a cache hit
         key = rel[:-3] if rel.endswith(".md") else rel
         found = ""
         if not directory:
             try:
-                with open(path, encoding="utf-8", errors="replace") as fh:
+                with open(path, encoding="utf-8-sig", errors="replace") as fh:
                     head = fh.read(1500)
                 if head.startswith("---"):
                     end = head.find("\n---", 3)
@@ -186,7 +199,8 @@ class MdFolders:
         return {"id": pid, "parent_id": parent, "kind": "page", "title": title, "icon": icon, "position": position,
                 "favorite": None, "is_template": 0, "inline": 0, "updated_at": _iso(mt), "created_at": _iso(mt),
                 "readonly": True, "source": {"folder": folder, "path": rel or ""},
-                "_file": None if directory else path, "_dir": path if directory else None}
+                "_file": None if directory else path, "_dir": path if directory else None,
+                "_key": ident if ident is not None else folder, "_stamp": stamp}
 
     # ------------------------------------------------------------------ reading
     def has(self, pid: str) -> bool:
@@ -203,7 +217,19 @@ class MdFolders:
     def _public(p: dict) -> dict:
         return {k: v for k, v in p.items() if not k.startswith("_")}
 
-    def _resolver(self, folder: str, src_rel: str):
+    def _resolver(self, key: str, src_rel: str):
+        def norm(x: str) -> str:
+            x = x.strip().rstrip("/")
+            return x[:-3] if x.lower().endswith(".md") else x
+
+        def lookup(folder: str, t: str):
+            here = str(Path(src_rel).parent) if src_rel else ""
+            for cand in (t, os.path.normpath(os.path.join(here, t)).replace("\\", "/")):
+                pid = self._by_rel.get((folder, _fold(cand)))
+                if pid:
+                    return pid
+            return self._by_name.get((folder, _fold(t.split("/")[-1])))
+
         def resolve(target: str):
             t = (target or "").strip()
             if t.startswith("@link:"):
@@ -211,14 +237,12 @@ class MdFolders:
                 t = unquote(t[6:])
             if not t:
                 return None
-            t = t.split("#")[0].strip().rstrip("/")
-            t = t[:-3] if t.lower().endswith(".md") else t
-            here = str(Path(src_rel).parent) if src_rel else ""
-            for cand in (t, os.path.normpath(os.path.join(here, t)).replace("\\", "/")):
-                pid = self._by_rel.get((folder, _fold(cand)))
+            # the whole target first: a note named "C# notes" is not the section "notes" of note "C"
+            for cand in dict.fromkeys(c for c in (norm(t), norm(t.split("#")[0])) if c):
+                pid = lookup(key, cand)
                 if pid:
                     return pid
-            return self._by_name.get((folder, _fold(t.split("/")[-1])))
+            return None
         return resolve
 
     def _raw(self, pg) -> str:
@@ -226,34 +250,34 @@ class MdFolders:
         if not f:
             return ""
         try:
-            return f.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+            return f.read_text(encoding="utf-8-sig", errors="replace").replace("\r\n", "\n")
         except OSError:
             return ""
 
     def blocks(self, pid: str) -> list:
         pg = self.pages[pid]
-        mt = pg["updated_at"]
+        stamp = pg["_stamp"]                  # mtime in ns + size: two saves within one second are told apart
         hit = self._blocks.get(pid)
-        if hit and hit[0] == mt:
+        if hit and hit[0] == stamp:
             return hit[1]
         fm, body = md.split_frontmatter(self._raw(pg))
-        blocks = md.to_blocks(body, resolve=self._resolver(pg["source"]["folder"], pg["source"]["path"]))
+        blocks = md.to_blocks(body, resolve=self._resolver(pg["_key"], pg["source"]["path"]))
         if blocks and blocks[0]["type"] == "heading" and _fold(md._plain(blocks[0].get("content"))) == _fold(pg["title"]):
             blocks = blocks[1:]
         if pg.get("_dir"):     # folder page: list what is inside, like Notion
             kids = sorted((p for p in self.pages.values() if p["parent_id"] == pid),
                           key=lambda p: (p["position"] >= 0, _fold(p["title"])))
             blocks = blocks + [{"type": "pageLink", "props": {"pageId": k["id"]}, "children": []} for k in kids]
-        self._blocks[pid] = (mt, blocks)
+        self._blocks[pid] = (stamp, blocks)
         return blocks
 
     def text(self, pid: str) -> str:
         pg = self.pages[pid]
         hit = self._text.get(pid)
-        if hit and hit[0] == pg["updated_at"]:
+        if hit and hit[0] == pg["_stamp"]:
             return hit[1]
         t = md.split_frontmatter(self._raw(pg))[1]
-        self._text[pid] = (pg["updated_at"], t)
+        self._text[pid] = (pg["_stamp"], t)
         return t
 
     def path(self, pid: str) -> list[dict]:

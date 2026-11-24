@@ -108,7 +108,9 @@ class Importer:
 
     # ---------------------------------------------------------------- pass 2
     def _folder(self, folder: Path, parent_id, root, tmpl_dir, is_root=False, template=False):
-        entries = sorted(folder.iterdir(), key=lambda p: (p.is_file(), _norm(p.name)))
+        # hidden entries (.DS_Store, ._Note.md AppleDouble files, .obsidian...) are never pages: _scan skips them too
+        entries = sorted((p for p in folder.iterdir() if not p.name.startswith(".")),
+                         key=lambda p: (p.is_file(), _norm(p.name)))
         notes = [p for p in entries if p.is_file() and p.suffix.lower() == ".md"]
         dirs = [p for p in entries if p.is_dir() and p.name not in SKIP_DIRS and not p.name.startswith(".")]
         # folder note: "X/X.md" or a hub "X/00 - X.md" becomes the folder's own page
@@ -121,12 +123,13 @@ class Importer:
         is_template = template or (tmpl_dir is not None and folder.resolve() == tmpl_dir) or \
             _norm(folder.name) in TEMPLATE_DIRS
         title = _title(folder.name)
+        # the folder note's id is allocated in pass 1: links to it must still resolve whatever the folder becomes
+        folder_id = self.by_path.get(_norm(str(folder_note.relative_to(root).with_suffix("")))) if folder_note else None
         fm_notes = [(n, md.split_frontmatter(n.read_text(encoding="utf-8", errors="replace"))[0])
                     for n in notes if n is not folder_note]
         if self.databases and not is_template and len(fm_notes) >= 2 and not dirs and \
                 sum(1 for _, fm in fm_notes if len(fm) >= 2) >= max(2, int(0.6 * len(fm_notes))):
-            return self._database(folder, parent_id, title, fm_notes, folder_note)
-        folder_id = self.by_path.get(_norm(str(folder_note.relative_to(root).with_suffix("")))) if folder_note else None
+            return self._database(folder, parent_id, title, fm_notes, folder_note, folder_id)
         content, icon, options = [], "📁", {}
         if folder_note:
             fm, body = md.split_frontmatter(folder_note.read_text(encoding="utf-8", errors="replace"))
@@ -172,7 +175,7 @@ class Importer:
         return self.s.create({**data, "id": pid})["id"]
 
     # ---------------------------------------------------------------- folder -> database
-    def _database(self, folder, parent_id, title, fm_notes, folder_note):
+    def _database(self, folder, parent_id, title, fm_notes, folder_note, folder_id=None):
         keys: dict[str, list] = {}
         for _, fm in fm_notes:
             for k, v in fm.items():
@@ -186,8 +189,8 @@ class Importer:
         content = []
         if folder_note:
             content = self._blocks(md.split_frontmatter(folder_note.read_text(encoding="utf-8", errors="replace"))[1])
-        db = self.s.create({"kind": "database", "title": title, "parent_id": parent_id, "schema": schema,
-                            "icon": "🗂️"})
+        data = {"kind": "database", "title": title, "parent_id": parent_id, "schema": schema, "icon": "🗂️"}
+        db = self.s.create({**data, "id": folder_id} if folder_id else data)
         self.stats["databases"] += 1
         by_name = {p["name"]: p for p in props}
         for path, fm in fm_notes:
@@ -280,12 +283,15 @@ def safe_extract(data: "bytes | Path", dest: Path):
             target = (dest / name).resolve()
             if not str(target).startswith(str(base) + "/") and target != base:
                 raise ValueError("unsafe path in archive")
-            if info.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with z.open(info) as src, open(target, "wb") as out:
-                shutil.copyfileobj(src, out)
+            try:
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(info) as src, open(target, "wb") as out:
+                    shutil.copyfileobj(src, out)
+            except OSError:
+                continue                    # "dossier" as a file and as a folder in one archive: the clash is skipped
 
 
 def import_path(store: Store, files_dir: Path, path: Path, parent_id=None, databases=True) -> dict:
@@ -296,7 +302,7 @@ def import_path(store: Store, files_dir: Path, path: Path, parent_id=None, datab
         try:
             shutil.copy(path, tmp / path.name)
             for sib in path.parent.iterdir():               # attachments next to the file
-                if sib.is_file() and sib.suffix.lower() != ".md":
+                if sib.is_file() and sib.suffix.lower() != ".md" and not sib.name.startswith("."):
                     shutil.copy(sib, tmp / sib.name)
             imp._scan(tmp)
             imp.root = tmp

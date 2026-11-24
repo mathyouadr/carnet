@@ -17,6 +17,7 @@ Custom blocks shared with the web app (``web/src/editor/schema.tsx``):
 from __future__ import annotations
 
 import re
+import threading
 from typing import Callable, Optional
 
 Resolver = Optional[Callable[[str], Optional[str]]]
@@ -38,12 +39,12 @@ for _k, _v in CALLOUT_EMOJI.items():
 def split_frontmatter(text: str) -> tuple[dict, str]:
     """``---\\nkey: value\\n---`` at the top of a file -> (dict, rest). A tiny YAML subset."""
     text = text.lstrip("\ufeff")
-    m = re.match(r"^---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", text, re.S)
+    m = re.match(r"^---[ \t]*\r?\n(?:(.*?)\r?\n)?---[ \t]*(?:\r?\n|$)", text, re.S)
     if not m:
         return {}, text
     data: dict = {}
     key = None
-    for line in m.group(1).splitlines():
+    for line in (m.group(1) or "").splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         item = re.match(r"^\s*-\s+(.*)$", line)
@@ -100,20 +101,25 @@ def _scalar(v: str):
 
 
 # ====================================================================== inline parsing
+#  Every quantifier that can scan far is bounded (or anchored on a run start) so that a long line of unmatched
+#  delimiters costs roughly linear time, not quadratic (20 000 x "[a](" used to take 49 s). A span longer than the
+#  bound is simply not formatted: it stays literal text.
+_HREF = r"(?:[^()\s]|\([^()\s]*\))+"                       # a URL, parentheses balanced one level deep
 INLINE_RE = re.compile(
-    r"(?P<code>`+)(?P<codetext>.+?)(?P=code)"
-    r"|(?P<math>(?<![\\$])\$(?!\s)(?P<mathtext>[^$\n]+?)(?<!\s)\$(?!\d))"
-    r"|(?P<wiki>!?\[\[(?P<wikitext>[^\]\n]+?)\]\])"
-    r"|(?P<img>!\[(?P<imgalt>[^\]]*)\]\((?P<imgsrc>[^)\s]+)(?:\s+\"[^\"]*\")?\))"
-    r"|(?P<link>\[(?P<linktext>[^\]]+)\]\((?P<linkhref>[^)\s]+)(?:\s+\"[^\"]*\")?\))"
-    r"|(?P<auto><(?P<autohref>https?://[^>\s]+)>)"
-    r"|(?P<url>(?<![\w(\[<])https?://[^\s<>()\[\]]+[^\s<>()\[\].,;:!?\"'])"
-    r"|(?P<bi>\*\*\*(?P<bitext>.+?)\*\*\*)"
-    r"|(?P<b>\*\*(?P<btext>.+?)\*\*|__(?P<btext2>[^_].*?)__)"
-    r"|(?P<i>(?<![\w*])\*(?![\s*])(?P<itext>.+?)(?<![\s*])\*(?!\*)|(?<![\w_])_(?![\s_])(?P<itext2>.+?)(?<![\s_])_(?![\w_]))"
-    r"|(?P<s>~~(?P<stext>.+?)~~)"
+    r"(?<!`)(?P<code>`+)(?!`)(?P<codetext>.{1,1000}?)(?<!`)(?P=code)(?!`)"
+    r"|(?P<math>(?<![\\$])\$(?!\s)(?P<mathtext>[^$\n]{1,1000}?)(?<!\s)\$(?!\d))"
+    r"|(?P<wiki>!?\[\[(?P<wikitext>[^\]\n]{1,200}?)\]\])"
+    r"|(?P<img>!\[(?P<imgalt>[^\]\n]{0,300})\]\((?P<imgsrc>" + _HREF + r")(?:\s+\"[^\"\n]{0,300}\")?\))"
+    r"|(?P<link>\[(?P<linktext>[^\]\n]{1,300})\]\((?P<linkhref>" + _HREF + r")(?:\s+\"[^\"\n]{0,300}\")?\))"
+    r"|(?P<auto><(?P<autohref>https?://[^>\s]{1,2000})>)"
+    r"|(?P<url>(?<![\w(\[<])https?://(?:[^\s<>()\[\]]|\([^\s<>()\[\]]*\))*"
+    r"(?:[^\s<>()\[\].,;:!?\"'\s]|\([^\s<>()\[\]]*\)))"
+    r"|(?P<bi>\*\*\*(?P<bitext>.{1,400}?)\*\*\*)"
+    r"|(?P<b>\*\*(?P<btext>.{1,400}?)\*\*|__(?P<btext2>[^_].{0,400}?)__)"
+    r"|(?P<i>(?<![\w*])\*(?![\s*])(?P<itext>.{1,400}?)(?<![\s*])\*(?!\*)|(?<![\w_])_(?![\s_])(?P<itext2>.{1,400}?)(?<![\s_])_(?![\w_]))"
+    r"|(?P<s>~~(?P<stext>.{1,400}?)~~)"
     r"|(?P<hl>==(?P<hltext>[^=\n]+?)==)"
-    r"|(?P<u><u>(?P<utext>.+?)</u>)"
+    r"|(?P<u><u>(?P<utext>.{1,400}?)</u>)"
     r"|(?P<br><br\s*/?>)"
     r"|(?P<esc>\\(?P<escch>[\\`*_{}\[\]()#+\-.!|$~=<>]))"
 )
@@ -144,14 +150,16 @@ def parse_inline(text: str, resolve: Resolver = None, styles: dict | None = None
         elif g["math"]:
             out.append({"type": "inlineMath", "props": {"latex": g["mathtext"]}})
         elif g["wiki"]:
-            raw = g["wikitext"]
-            target, _, alias = raw.partition("|")
-            target = target.split("#")[0].strip() or target.strip()
-            pid = resolve(target) if resolve else None
+            target, alias = _split_wiki(g["wikitext"])
+            full = _unescape_wiki(target).strip()
+            head = _unescape_wiki(re.split(r"(?<!\\)#", target, maxsplit=1)[0]).strip()
+            pid, title = (resolve(full), full) if resolve and full else (None, full)
+            if not pid and resolve and head and head != full:          # [[Note#Section]]
+                pid, title = resolve(head), head
             if pid:
-                out.append({"type": "pageMention", "props": {"pageId": pid, "title": alias.strip() or target}})
+                out.append({"type": "pageMention", "props": {"pageId": pid, "title": alias or title}})
             else:
-                add_text(alias.strip() or target)
+                add_text(alias or full)
         elif g["img"] and not re.match(r"^(https?:|/|data:image/)", g["imgsrc"]) and re.match(r"^[a-z][a-z0-9+.-]*:", g["imgsrc"], re.I):
             add_text(g["imgalt"])
         elif g["img"]:
@@ -191,6 +199,23 @@ def parse_inline(text: str, resolve: Resolver = None, styles: dict | None = None
             add_text(g["escch"])
     add_text(text[pos:])
     return _merge(out)
+
+
+def _split_wiki(raw: str) -> tuple[str, str]:
+    """``[[target|alias]]`` -> (target, alias); ``\\|`` is a literal pipe in a title (Carnet's own export)."""
+    m = re.search(r"(?<!\\)\|", raw)
+    if not m:
+        return raw, ""
+    return raw[:m.start()], raw[m.end():].strip()
+
+
+def _unescape_wiki(s: str) -> str:
+    return s.replace("\\#", "#").replace("\\|", "|")
+
+
+def _wiki(title: str) -> str:
+    """A page title as a ``[[link]]`` target: ``#`` and ``|`` are escaped so that the link reads back whole."""
+    return "[[" + re.sub(r"([#|])", r"\\\1", title) + "]]"
 
 
 def _merge(items):
@@ -235,7 +260,7 @@ NO_DEFAULT_PROPS = {"image", "file", "video", "audio", "math", "pageLink", "data
                     "table"}
 
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*([\w+#.-]*)")
-HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$")
 BULLET = re.compile(r"^(\s*)([-*+])\s+(.*)$")
 ORDERED = re.compile(r"^(\s*)(\d{1,9})[.)]\s+(.*)$")
 CHECK = re.compile(r"^\[([ xX])\]\s*(.*)$")
@@ -256,11 +281,43 @@ def to_blocks(text: str, resolve: Resolver = None, resolve_file: Resolver = None
     ``resolve_file(name)`` returns a URL for ``![[embeds]]`` and relative images.
     """
     _, body = split_frontmatter(text or "")
-    lines = body.replace("\r\n", "\n").replace("\r", "\n").replace("\t", "    ").split("\n")
+    lines = _untab(body.replace("\r\n", "\n").replace("\r", "\n").split("\n"))
     return _parse_blocks(lines, resolve, resolve_file)
 
 
+def _untab(lines: list) -> list:
+    """Tabs become spaces (list nesting counts spaces), except inside code fences where they are content."""
+    out, fence = [], None
+    for line in lines:
+        if fence is None:
+            fm = FENCE.match(line)
+            if fm:
+                fence = fm.group(2)
+            else:
+                line = line.replace("\t", "    ")
+        elif line.strip().startswith(fence):
+            fence = None
+        out.append(line)
+    return out
+
+
+MAX_NESTING = 40                 # quotes / lists / toggles nested deeper are kept as plain text
+_nesting = threading.local()
+
+
 def _parse_blocks(lines, resolve, resolve_file) -> list:
+    depth = getattr(_nesting, "depth", 0)
+    if depth >= MAX_NESTING:
+        text = "\n".join(s.strip() for s in lines if s.strip())
+        return [_block("paragraph", parse_inline(text, resolve))] if text else []
+    _nesting.depth = depth + 1
+    try:
+        return _parse_blocks_at(lines, resolve, resolve_file)
+    finally:
+        _nesting.depth = depth
+
+
+def _parse_blocks_at(lines, resolve, resolve_file) -> list:
     out: list = []
     i, n = 0, len(lines)
     para: list[str] = []
@@ -300,21 +357,30 @@ def _parse_blocks(lines, resolve, resolve_file) -> list:
         if stripped.startswith("$$"):
             flush()
             rest = stripped[2:]
-            if rest.endswith("$$") and len(rest) >= 2:
-                out.append(_block("math", None, {"latex": rest[:-2].strip()}))
+            close = rest.find("$$")
+            if close >= 0:                                  # "$$ x $$" on one line
+                out.append(_block("math", None, {"latex": rest[:close].strip()}))
+                tail = rest[close + 2:].strip()
+                if tail:
+                    out.extend(_parse_blocks([tail], resolve, resolve_file))
                 i += 1
                 continue
             body = [rest] if rest else []
-            i += 1
-            while i < n and "$$" not in lines[i]:
-                body.append(lines[i])
+            j = i + 1
+            while j < n and "$$" not in lines[j]:
+                body.append(lines[j])
+                j += 1
+            if j >= n:                                      # never closed: plain text, nothing swallowed
+                para.append(line)
                 i += 1
-            if i < n:
-                tail = lines[i].split("$$")[0]
-                if tail.strip():
-                    body.append(tail)
-            i += 1
+                continue
+            before, _, after = lines[j].partition("$$")
+            if before.strip():
+                body.append(before)
             out.append(_block("math", None, {"latex": "\n".join(body).strip()}))
+            i = j + 1
+            if after.strip():
+                out.extend(_parse_blocks([after.strip()], resolve, resolve_file))
             continue
         hm = HEADING.match(stripped) if not line.startswith("    ") else None
         if hm:
@@ -356,6 +422,10 @@ def _parse_blocks(lines, resolve, resolve_file) -> list:
                 kind = cm.group(1).lower()
                 title = cm.group(2).strip()
                 rest = quote[1:]
+                mark = _CALLOUT_MARK.match(rest[0].strip()) if rest else None
+                props = _mark_props(mark.group(1)) if mark else {}
+                if mark:
+                    rest = rest[1:]
                 inner = _parse_blocks(rest, resolve, resolve_file)
                 first = parse_inline(title, resolve, {"bold": True}) if title else []
                 children = inner
@@ -364,10 +434,11 @@ def _parse_blocks(lines, resolve, resolve_file) -> list:
                     head = inner[0].get("content", [])
                     first = _merge(first + [{"type": "text", "text": "\n", "styles": {}}] + head) if first else head
                     children = inner[1:]
-                out.append(_block("callout", first, {"emoji": CALLOUT_EMOJI.get(kind, "💡"),
-                                                     "color": CALLOUT_COLOR.get(kind, "gray")}, children))
+                out.append(_block("callout", first, {"emoji": props.get("emoji", CALLOUT_EMOJI.get(kind, "💡")),
+                                                     "color": props.get("color", CALLOUT_COLOR.get(kind, "gray"))},
+                                  children))
             else:
-                em = re.match(r"^(\S{1,2})\s+(.*)", quote[0].strip()) if quote else None
+                em = re.match(r"^(\S{1,8}?)\s+(.*)", quote[0].strip()) if quote else None
                 if em and _is_emoji(em.group(1)):
                     inner = _parse_blocks([em.group(2)] + quote[1:], resolve, resolve_file)
                     first = inner[0].get("content", []) if inner and inner[0]["type"] == "paragraph" else []
@@ -410,14 +481,25 @@ def _parse_blocks(lines, resolve, resolve_file) -> list:
         if im:
             flush()
             src = im.group("src")
-            url = src if re.match(r"^(https?:|data:|/)", src) else (resolve_file(src) if resolve_file else None) or src
-            out.append(_file_block(url, im.group("alt") or src.rsplit("/", 1)[-1], caption=im.group("alt") or ""))
+            url = _safe_src(src, resolve_file)
+            if url:
+                out.append(_file_block(url, im.group("alt") or src.rsplit("/", 1)[-1], caption=im.group("alt") or ""))
+            elif im.group("alt"):
+                out.append(_block("paragraph", [{"type": "text", "text": im.group("alt"), "styles": {}}]))
             i += 1
             continue
         para.append(line)
         i += 1
     flush()
     return out
+
+
+def _safe_src(src: str, resolve_file: Resolver) -> Optional[str]:
+    if src.startswith("/files/") or re.match(r"^https?://", src, re.I):
+        return src
+    if src.startswith("//") or re.match(r"^[a-z][a-z0-9+.-]*:", src, re.I):
+        return None
+    return (resolve_file(src) if resolve_file else None) or src
 
 
 def _embed_block(name, size, resolve, resolve_file):
@@ -543,8 +625,40 @@ def _lang(lang: str) -> str:
     return LANGS.get(lang, lang or "text")
 
 
+_EMOJI = re.compile("[\u00a9\u00ae\u203c\u2049\u2122\u2139\u2194-\u2199\u21a9\u21aa\u231a\u231b\u2328"
+                    "\u23cf\u23e9-\u23f3\u23f8-\u23fa\u24c2\u25aa\u25ab\u25b6\u25c0\u25fb-\u25fe"
+                    "\u2600-\u27bf\u2934\u2935\u2b05-\u2b07\u2b1b\u2b1c\u2b50\u2b55\u3030\u303d\u3297"
+                    "\u3299\U0001f000-\U0001faff]")
+_EMOJI_JOIN = "\ufe0f\u200d\u20e3"
+
+
 def _is_emoji(s: str) -> bool:
-    return bool(s) and all(ord(c) > 0x2000 for c in s)
+    """A real emoji (symbol ranges, not every non-ASCII character: '—', '→', '•' open quotes, not callouts)."""
+    return bool(s) and bool(_EMOJI.match(s)) and all(_EMOJI.fullmatch(c) or c in _EMOJI_JOIN for c in s)
+
+
+_CALLOUT_MARK = re.compile(r"^<!--\s*carnet:\s*(.*?)\s*-->$")
+
+
+def _mark_props(text: str) -> dict:
+    props = {}
+    for tok in text.split():
+        key, _, val = tok.partition("=")
+        if key == "emoji" and val and _is_emoji(val):
+            props["emoji"] = val
+        elif key == "color" and re.fullmatch(r"[a-z]{2,12}", val):
+            props["color"] = val
+    return props
+
+
+def _callout_mark(emoji: str, color: str, kind: str) -> str:
+    """Only what the Obsidian callout type does not already say: ``<!-- carnet: emoji=… color=… -->``."""
+    parts = []
+    if emoji != CALLOUT_EMOJI.get(kind):
+        parts.append("emoji=" + re.sub(r"[\s<>-]", "", emoji)[:16])
+    if color != CALLOUT_COLOR.get(kind, "gray"):
+        parts.append("color=" + re.sub(r"[^a-z]", "", color)[:12])
+    return f"<!-- carnet: {' '.join(parts)} -->" if parts else ""
 
 
 # ====================================================================== export
@@ -594,7 +708,11 @@ def _block_md(b, depth, num, title_of, url_of):
         level = int(p.get("level") or 1)
         s = "#" * max(1, min(level, 6)) + " " + inline
         return s + ("\n\n" + child_md if child_md else "")
-    if t in ("bulletListItem", "numberedListItem", "checkListItem", "toggleListItem"):
+    if t == "toggleListItem":
+        summary = inline.replace("\n", " ")
+        inner = "\n\n" + child_md + "\n\n" if child_md else "\n\n"
+        return f"<details>\n<summary>{summary}</summary>{inner}</details>"
+    if t in ("bulletListItem", "numberedListItem", "checkListItem"):
         marker = {"bulletListItem": "- ", "numberedListItem": f"{num or 1}. ",
                   "checkListItem": "- [x] " if p.get("checked") else "- [ ] ", "toggleListItem": "- "}[t]
         s = marker + inline.replace("\n", "\n" + " " * len(marker))
@@ -620,6 +738,9 @@ def _block_md(b, depth, num, title_of, url_of):
         else:
             head = f"> [!{kind}]" + (f" {inline}" if inline and "\n" not in inline else "")
             body = ("" if inline and "\n" not in inline else inline) + ("\n\n" + child_md if child_md else "")
+        mark = _callout_mark(emoji, p.get("color") or "gray", kind)
+        if mark:
+            body = mark + ("\n" + body.lstrip("\n") if body.strip() else "")
         lines = [head] + [("> " + line if line else ">") for line in body.strip("\n").split("\n")] if body.strip() else [head]
         return "\n".join(lines)
     if t == "codeBlock":
@@ -637,7 +758,7 @@ def _block_md(b, depth, num, title_of, url_of):
         rows = (c or {}).get("rows", []) if isinstance(c, dict) else []
         if not rows:
             return None
-        cells = [[inline_md(cell.get("content") if isinstance(cell, dict) else cell, title_of).replace("|", "\\|")
+        cells = [[re.sub(r"(?<!\\)\|", r"\\|", inline_md(cell.get("content") if isinstance(cell, dict) else cell, title_of))
                   .replace("\n", "<br>") for cell in r.get("cells", [])] for r in rows]
         width = max(len(r) for r in cells)
         cells = [r + [""] * (width - len(r)) for r in cells]
@@ -655,11 +776,11 @@ def _block_md(b, depth, num, title_of, url_of):
     if t == "pageLink":
         pid = p.get("pageId") or ""
         title = (title_of(pid) if title_of else None) or "Untitled"
-        return f"[[{title}]]"
+        return _wiki(title)
     if t == "database":
         pid = p.get("pageId") or ""
         title = (title_of(pid) if title_of else None) or "Database"
-        return f"[[{title}]]"
+        return _wiki(title)
     if t == "embed":
         url = p.get("url") or ""
         return f"<{url}>" if url else None
@@ -679,9 +800,19 @@ def _esc(text: str) -> str:
     return re.sub(r"([\\`*_\[\]<>]|~~|==|\$)", r"\\\1", text)
 
 
+def _escape_line_starts(s: str) -> str:
+    """A line that would read as a list, heading, quote or table row gets a backslash (Markdown unescapes it)."""
+    s = re.sub(r"(?m)^([-+#>|])", lambda m: "\\" + m.group(1), s)
+    return re.sub(r"(?m)^(\d+)([.)])(?=\s|$)", lambda m: m.group(1) + "\\" + m.group(2), s)
+
+
 def inline_md(items, title_of: Resolver = None) -> str:
     if isinstance(items, str):
-        return _esc(items)
+        return _escape_line_starts(_esc(items))
+    return _escape_line_starts(_inline_md(items, title_of))
+
+
+def _inline_md(items, title_of: Resolver = None) -> str:
     out = []
     for it in items or []:
         t = it.get("type")
@@ -695,7 +826,7 @@ def inline_md(items, title_of: Resolver = None) -> str:
         elif t == "pageMention":
             pr = it.get("props") or {}
             title = (title_of(pr.get("pageId", "")) if title_of else None) or pr.get("title") or "Untitled"
-            out.append(f"[[{title}]]")
+            out.append(_wiki(title))
         elif t == "inlineMath":
             out.append("$" + (it.get("props") or {}).get("latex", "") + "$")
     return "".join(out)
