@@ -329,7 +329,7 @@ class Store:
                                                  "type": "table"}], schema)
         props = {}
         if parent is not None and parent["kind"] == "database":
-            props = self._props_for(parent, data.get("props") or {})
+            props = self._props_for(parent_id, data.get("props") or {})
         position = data.get("position")
         if not isinstance(position, (int, float)):
             position = self._next_position(parent_id)
@@ -374,7 +374,7 @@ class Store:
                 raise Invalid("only database rows have properties")
             merged = {**_loads(r["props"], {}), **(data["props"] or {})} if data.get("merge_props", True) \
                 else (data["props"] or {})
-            put("props", json.dumps(self._props_for(parent, merged)))
+            put("props", json.dumps(self._props_for(r["parent_id"], merged)))
         if "schema" in data and r["kind"] == "database":
             put("schema", json.dumps(self._clean_schema(data["schema"])))
         if "views" in data and r["kind"] == "database":
@@ -671,13 +671,17 @@ class Store:
             out.append(w)
         return out
 
-    def _props_for(self, db_row, props):
-        """Clean row values against the database schema; option names never seen before are added to it."""
-        schema = self.schema_of(db_row)
-        self._schema_dirty = False
-        out = self._clean_props(props, schema)
-        if self._schema_dirty:
-            self.x("UPDATE pages SET schema=?, updated_at=? WHERE id=?", (json.dumps(schema), now(), db_row["id"]))
+    def _props_for(self, db_id, props):
+        """Clean row values against the database schema; option names never seen before are added to it.
+        The schema is read, extended and saved in one transaction: concurrent rows must not overwrite each
+        other's new options."""
+        with self.tx():
+            db_row = self._row(db_id)
+            schema = self.schema_of(db_row)
+            before = json.dumps(schema, sort_keys=True)
+            out = self._clean_props(props, schema)
+            if json.dumps(schema, sort_keys=True) != before:
+                self.x("UPDATE pages SET schema=?, updated_at=? WHERE id=?", (json.dumps(schema), now(), db_id))
         return out
 
     def _clean_props(self, props, schema):
@@ -743,7 +747,6 @@ class Store:
                 return o["id"]
         o = {"id": new_id(6), "name": v[:200], "color": COLORS[1 + len(opts) % (len(COLORS) - 1)]}
         opts.append(o)
-        self._schema_dirty = True
         return o["id"]
 
 
