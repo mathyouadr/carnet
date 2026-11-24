@@ -10,9 +10,10 @@ import { BOOT } from "../../api";
 import { Popover } from "../../ui/Popover";
 import { t } from "../../i18n";
 import { sanitize } from "../sanitize";
-import { aiBlocks, aiStream } from "./stream";
+import { aiBlocks, aiStream, AIError } from "./stream";
 import type { AIMessage, AIRequest } from "./stream";
-import { mdPlain, mdPreview, stripFence, wordDiff } from "./text";
+import { askedText, canReplace, fingerprint, historyFor, selectionTooLong } from "./policy";
+import { mdPreview, mdText, stripFence, wordDiff } from "./text";
 
 type Cmd = { id: string; label: string; icon: ReactNode };
 const SELECTION_CMDS: Cmd[] = [
@@ -38,11 +39,35 @@ const AROUND = 30;
 export const aiName = () => BOOT.ai?.name || "AI";
 const withName = (s: string) => t(s).replace("{name}", aiName());
 
-/** Server messages are English; show them in the UI language. */
-function localError(msg: string): string {
-  const m = /^AI server error \((\d+)\)$/.exec(msg);
-  if (m) return t("AI server error ({code})").replace("{code}", m[1]);
-  return t(msg);
+/** Server error codes (see carnet/ai.py) → UI text. */
+const AI_ERRORS: Record<string, string> = {
+  unreachable: "AI server unreachable",
+  interrupted: "AI answer interrupted",
+  truncated: "The answer was cut short (too long): nothing was applied",
+  filtered: "The AI server refused to answer this text",
+  malformed: "Unexpected answer from the AI server",
+  upstream_error: "The AI server returned an error",
+  deadline: "The AI answer took too long",
+  selection_too_long: "This selection is too long to rewrite (20 000 characters max)",
+  too_many_requests: "Too many AI requests at the moment, try again shortly",
+  read_only: "AI is not available for this page",
+  in_trash: "This page is in the trash",
+  not_found: "Page not found",
+  too_large: "The request is too large",
+  invalid_request: "AI request refused",
+  invalid_body: "AI request refused",
+  markdown_expected: "AI request refused",
+};
+
+function localError(e: any): string {
+  if (e instanceof AIError) {
+    if (e.code === "upstream_http") return t("AI server error ({code})").replace("{code}", String(e.status ?? "?"));
+    return t(AI_ERRORS[e.code] || "AI request failed");
+  }
+  if (e instanceof TypeError) return t("AI server unreachable");     // fetch could not reach the server
+  if (typeof e?.message === "string" && Object.prototype.hasOwnProperty.call(AI_ERRORS, e.message))
+    return t(AI_ERRORS[e.message]);
+  return typeof e?.message === "string" ? e.message : String(e);     // already in the UI language
 }
 
 /** Index in `doc` (top level) of the block holding `id`, itself or as a descendant. */
@@ -63,9 +88,11 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   const [selMd, setSelMd] = useState("");
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
+  const [partial, setPartial] = useState(false);       // stopped before the end: the answer is cut
   const [followup, setFollowup] = useState("");
   const [last, setLast] = useState<{ command: string; prompt: string; history: AIMessage[]; rewrite: boolean } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
+  const snap = useRef("");                             // the blocks the answer is about (ids + content)
   const inputRef = useRef<HTMLInputElement>(null);
 
   const anchor = useMemo(() => {
@@ -103,12 +130,14 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
     ctrl.current?.abort();
     const c = new AbortController();
     ctrl.current = c;
-    setLast({ command, prompt, history, rewrite });
-    setAnswer(""); setError(""); setStale(false); setFollowup("");
+    const kept = historyFor(history);
+    setLast({ command, prompt, history: kept, rewrite });
+    setAnswer(""); setError(""); setStale(false); setFollowup(""); setPartial(false);
+    snap.current = fingerprint(blocksNow());
     setPhase("stream");
     let text = "";
     try {
-      await aiStream(buildRequest(command, prompt, history), {
+      await aiStream(buildRequest(command, prompt, kept), {
         onSelection: (md) => setSelMd(md),
         onDelta: (d) => { text += d; setAnswer(text); },
       }, c.signal);
@@ -117,7 +146,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       setPhase("done");
     } catch (e: any) {
       if (c.signal.aborted) return;
-      setError(localError(e?.message || String(e)));
+      setError(localError(e));
       setPhase("error");
     }
   };
@@ -126,7 +155,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
 
   const sendFollowup = () => {
     if (!last || !followup.trim()) return;
-    const asked = last.prompt ? `${cmdLabel(last.command)}: ${last.prompt}` : cmdLabel(last.command);
+    const asked = askedText(last.command, last.prompt, t(cmdLabel(last.command)));
     run("custom", followup.trim(), [...last.history, { role: "user", content: asked }, { role: "assistant", content: answer }], last.rewrite);
   };
 
@@ -135,8 +164,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
     try {
       const blocks = sanitize(await aiBlocks(stripFence(answer)));
       if (!blocks.length) throw new Error(t("Empty answer"));
-      const present = blocksNow();
-      if (present.length !== blockIds.length) {
+      if (fingerprint(blocksNow()) !== snap.current) {
         if (mode === "below" && stale) {
           const ref = editor.getTextCursorPosition().block.id;
           editor.transact(() => editor.insertBlocks(blocks, ref, "after"));
@@ -146,6 +174,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
         setError(t("The text changed in the meantime"));
         return;
       }
+      const present = blocksNow();
       const lastId = blockIds[blockIds.length - 1];
       const only = present.length === 1 ? present[0] : null;
       const emptyLine = !hasSelection && only && only.type === "paragraph" && !(only.content || []).length;
@@ -156,9 +185,10 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       onClose();
       setTimeout(() => editor.focus(), 0);
     } catch (e: any) {
-      setError(localError(e?.message || String(e)));
+      setError(localError(e));
     }
   };
+
 
   const onKey = (e: React.KeyboardEvent) => {
     if (phase !== "choose") return;
@@ -203,21 +233,22 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
             {phase === "stream" && !answer && <span className="cn-ai-thinking">{withName("{name} is thinking…")}</span>}
             {(phase === "stream" || !rewrite) && answer &&
               <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: mdPreview(stripFence(answer)) }} />}
-            {phase === "done" && rewrite && wordDiff(mdPlain(selMd), mdPlain(stripFence(answer))).map((p, i) =>
+            {phase === "done" && rewrite && wordDiff(mdText(selMd), mdText(stripFence(answer))).map((p, i) =>
               <span key={i} className={p.op === "del" ? "cn-ai-del" : p.op === "ins" ? "cn-ai-ins" : ""}>{p.text}</span>)}
             {phase === "error" && <div className="cn-ai-error">{error}</div>}
           </div>
+          {phase === "done" && partial && <div className="cn-ai-error">{t("Stopped early: partial answer. Replace is disabled.")}</div>}
           {phase === "done" && error && <div className="cn-ai-error">{error}</div>}
           <div className="cn-ai-actions">
             {phase === "stream" && (
-              <button type="button" className="cn-ai-btn" onClick={() => { ctrl.current?.abort(); setPhase(answer ? "done" : "choose"); }}>
+              <button type="button" className="cn-ai-btn" onClick={() => { ctrl.current?.abort(); setPartial(!!answer); setPhase(answer ? "done" : "choose"); }}>
                 <Square size={14} />{t("Stop")}
               </button>
             )}
-            {phase === "done" && !stale && rewrite && (
+            {phase === "done" && canReplace({ rewrite, partial, stale }) && (
               <button type="button" className="cn-ai-btn primary" onClick={() => apply("replace")}><Check size={14} />{t("Replace")}</button>
             )}
-            {phase === "done" && !stale && !rewrite && (
+            {phase === "done" && !partial && !stale && !rewrite && (
               <button type="button" className="cn-ai-btn primary" onClick={() => apply("insert")}><Check size={14} />{t("Insert")}</button>
             )}
             {phase === "done" && (
