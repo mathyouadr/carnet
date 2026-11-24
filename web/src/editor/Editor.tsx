@@ -101,6 +101,32 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     return () => clearTimeout(timer);
   }, [aiOn, page.id, openAI]);
 
+  // dragging a block (or a file) near the top or bottom edge scrolls the page, as the browser does not here
+  useEffect(() => {
+    const el = host.current;
+    const area = el?.closest(".cn-scroll") as HTMLElement | null;
+    if (!el || !area) return;
+    let y = 0, raf = 0, on = false;
+    const step = () => {
+      const r = area.getBoundingClientRect();
+      const zone = 90;
+      const d = y < r.top + zone ? -(r.top + zone - y) : y > r.bottom - zone ? y - (r.bottom - zone) : 0;
+      if (d) area.scrollTop += Math.sign(d) * Math.min(28, 4 + Math.abs(d) / 4);
+      raf = on ? requestAnimationFrame(step) : 0;
+    };
+    const over = (e: DragEvent) => {
+      const r = area.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right) return;
+      y = e.clientY;
+      if (!on) { on = true; raf = requestAnimationFrame(step); }
+    };
+    const stop = () => { on = false; cancelAnimationFrame(raf); raf = 0; };
+    document.addEventListener("dragover", over, true);
+    document.addEventListener("dragend", stop, true);
+    document.addEventListener("drop", stop, true);
+    return () => { stop(); document.removeEventListener("dragover", over, true); document.removeEventListener("dragend", stop, true); document.removeEventListener("drop", stop, true); };
+  }, []);
+
   // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
   const [selMenu, setSelMenu] = useState<DOMRect | null>(null);
   const [pageMenu, setPageMenu] = useState<DOMRect | null>(null);
