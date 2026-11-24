@@ -18,7 +18,7 @@ import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
-import { BlockMenu } from "./BlockMenu";
+import { BlockMenu, SelectionMenu } from "./BlockMenu";
 import { PageMenu } from "../app/PageMenu";
 import { useTheme } from "../app/theme";
 
@@ -102,6 +102,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   }, [aiOn, page.id, openAI]);
 
   // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
+  const [selMenu, setSelMenu] = useState<DOMRect | null>(null);
   const [pageMenu, setPageMenu] = useState<DOMRect | null>(null);
   const [blockMenu, setBlockMenu] = useState<{ id: string; at: DOMRect } | null>(null);
   useEffect(() => {
@@ -123,7 +124,12 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       const tg = e.target as HTMLElement;
       if (tg.closest?.("input, textarea:not(.cn-title), select, a[href], .cn-pop")) return;
       if (tg.closest?.("button") && tg.closest?.(".bn-editor")) return;
-      if (!window.getSelection()?.isCollapsed) return;
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && el.querySelector(".bn-editor")?.contains(sel.anchorNode)) {
+        e.preventDefault();
+        setSelMenu(new DOMRect(e.clientX, e.clientY, 0, 0));
+        return;
+      }
       let id: string | null | undefined;
       if (tg.closest?.(".bn-editor")) id = idOf(tg);
       if (!id) {
@@ -301,6 +307,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         </button>
       )}
       {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
+      {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
