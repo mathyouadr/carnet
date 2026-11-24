@@ -1,7 +1,7 @@
 // Chat panel next to the page: questions and answers about the page, with a choice of model.
 // It never edits the page by itself (the ✨ button and /ia do that); an answer can be inserted by hand.
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUp, Check, CornerDownLeft, Square, Trash2, X, MessageCircle } from "lucide-react";
+import { Maximize2, Minimize2, ArrowDownToLine, ArrowUp, Check, CornerDownLeft, Square, Trash2, X, MessageCircle } from "lucide-react";
 import { BOOT } from "../../api";
 import { t } from "../../i18n";
 import { sanitize } from "../sanitize";
@@ -9,6 +9,7 @@ import { aiBlocks, aiChatStream, AIError } from "./stream";
 import type { AIMessage } from "./stream";
 import { historyFor } from "./policy";
 import { mdPreview, stripFence } from "./text";
+import { chatHtml } from "./chatMd";
 
 const MODEL_KEY = "carnet:chat-model";
 
@@ -27,6 +28,8 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
   const [msgs, setMsgs] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(() => localStorage.getItem("carnet:chat-full") === "1");
+  const toggleFull = () => setFull((f) => { localStorage.setItem("carnet:chat-full", f ? "0" : "1"); return !f; });
   const [error, setError] = useState("");
   const ctrl = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
@@ -88,7 +91,7 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
   };
 
   return (
-    <aside className="cn-chat" aria-label={t("Chat")}>
+    <aside className={`cn-chat ${full ? "full" : ""}`} aria-label={t("Chat")}>
       <div className="cn-chat-top">
         <MessageCircle size={16} />
         <select value={model} onChange={(e) => { setModel(e.target.value); localStorage.setItem(MODEL_KEY, e.target.value); }}
@@ -104,6 +107,8 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
         </>}
         {!!msgs.length && <button type="button" className="cn-chat-ic" title={t("New conversation")} aria-label={t("New conversation")}
           onClick={() => { stop(); setMsgs([]); setError(""); }}><Trash2 size={15} /></button>}
+        <button type="button" className="cn-chat-ic" title={t(full ? "Reduce" : "Full screen")} aria-label={t(full ? "Reduce" : "Full screen")}
+          onClick={toggleFull}>{full ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
         <button type="button" className="cn-chat-ic" title={t("Close")} aria-label={t("Close")} onClick={() => { stop(); onClose(); }}><X size={16} /></button>
       </div>
       <div className="cn-chat-body">
@@ -112,7 +117,7 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
           ? <div key={i} className="cn-chat-msg user">{m.content}</div>
           : <div key={i} className="cn-chat-msg bot">
               {m.content
-                ? <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: mdPreview(stripFence(m.content)) }} />
+                ? <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: chatHtml(stripFence(m.content), mdPreview) }} />
                 : <span className="cn-ai-thinking">…</span>}
               {m.content && !(busy && i === msgs.length - 1) && (
                 <div className="cn-chat-acts">

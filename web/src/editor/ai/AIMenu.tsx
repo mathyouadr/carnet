@@ -98,9 +98,18 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   const snap = useRef("");                             // the blocks the answer is about (ids + content)
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // The menu opens where the user is working: next to the selection or the cursor line, on the side that has room.
+  // A range taller than the screen (a whole page) is anchored at 30% of the viewport instead of at its far end.
   const anchor = useMemo(() => {
-    const id = blockIds[blockIds.length - 1];
-    return (editor.domElement?.querySelector(`[data-id="${id}"]`) as HTMLElement | null) || null;
+    const el = (id: string) => editor.domElement?.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
+    const first = el(blockIds[0])?.getBoundingClientRect();
+    const last = el(blockIds[blockIds.length - 1])?.getBoundingClientRect();
+    if (!first || !last) return null;
+    const vh = innerHeight;
+    const top = Math.max(first.top, 0), bottom = Math.min(last.bottom, vh);
+    const left = Math.max(first.left, 0);
+    if (bottom - top > vh * 0.5) return new DOMRect(left, vh * 0.3, first.width, 0);
+    return new DOMRect(left, top, first.width, Math.max(0, bottom - top));
   }, [editor, blockIds]);
 
   useEffect(() => () => ctrl.current?.abort(), []);

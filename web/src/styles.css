@@ -809,3 +809,12 @@ body.cn-marquee-on { user-select: none; -webkit-user-select: none; cursor: defau
 @media (max-width: 760px) { .cn-chat { left: 0; right: 0; top: 12%; bottom: 0; width: auto; max-width: none; border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
 .cn-chat-acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .cn-chat-acts .cn-chat-ins { margin-top: 0; border: 1px solid var(--cn-line-2); }
+.cn-chat.full { inset: 0; top: 0; width: auto; max-width: none; border-radius: 0; border: 0; z-index: 60; background: var(--cn-bg); }
+.cn-chat.full .cn-chat-top, .cn-chat.full .cn-chat-body, .cn-chat.full .cn-chat-in { padding-left: max(16px, calc((100% - 860px) / 2)); padding-right: max(16px, calc((100% - 860px) / 2)); }
+.cn-chat.full .cn-chat-msg { font-size: 17px; line-height: 1.65; max-width: 100%; }
+.cn-chat.full .cn-chat-msg.user { max-width: 80%; }
+.cn-chat.full .cn-chat-msg.bot { background: transparent; padding-left: 0; padding-right: 0; }
+.cn-chat-msg .katex { font-size: 1.08em; }
+.cn-chat-msg .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; }
+.cn-chat-msg.bot .cn-ai-md p { margin: 0 0 8px; } .cn-chat-msg.bot .cn-ai-md li { margin-bottom: 3px; }
+.cn-chat-msg.bot .cn-ai-md code { background: var(--cn-hover); padding: 1px 4px; border-radius: 4px; font-size: .92em; }
