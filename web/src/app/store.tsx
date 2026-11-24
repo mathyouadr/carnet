@@ -75,12 +75,14 @@ function useKeyboardFlag(mobile: boolean) {
     const orient = () => { base = vv.height; on(); };
     vv.addEventListener("resize", on);
     document.addEventListener("focusin", on);
-    document.addEventListener("focusout", () => setTimeout(on, 50));
+    const off = () => { setTimeout(on, 50); };
+    document.addEventListener("focusout", off);
     window.addEventListener("orientationchange", orient);
     on();
     return () => {
       vv.removeEventListener("resize", on);
       document.removeEventListener("focusin", on);
+      document.removeEventListener("focusout", off);
       window.removeEventListener("orientationchange", orient);
       root.classList.remove("cn-kb");
     };
