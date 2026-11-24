@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, defaultProps } from "@blocknote/core";
 import { createReactBlockSpec, createReactInlineContentSpec } from "@blocknote/react";
 import { withMultiColumn } from "@blocknote/xl-multi-column";
-import { createCodeBlockSpec } from "@blocknote/core";
+import { createCodeBlockSpec, createDividerBlockSpec } from "@blocknote/core";
 import { codeBlockOptions } from "@blocknote/code-block";
 import katex from "katex";
 import { useApp } from "../app/store";
@@ -262,6 +262,7 @@ export const schema = withMultiColumn(BlockNoteSchema.create({
   blockSpecs: {
     ...baseBlocks,
     codeBlock: createCodeBlockSpec(codeBlockOptions),
+    divider: createDividerBlockSpec(),
     callout: CalloutBlock(),
     math: MathBlock(),
     pageLink: PageLinkBlock(),

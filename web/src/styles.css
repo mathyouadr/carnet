@@ -202,11 +202,11 @@ select.cn-input { padding: 0 6px; }
 .cn-editor .bn-editor { padding-inline: 0; font-size: 16px; line-height: 1.6; background: transparent; }
 .cn-editor .bn-block-content { padding-block: 2px; }
 .cn-editor.read .bn-editor { caret-color: transparent; }
-.bn-container[data-color-scheme] .bn-editor h1, .cn-editor [data-content-type="heading"][data-level="1"] { font-size: 1.875em; }
-.cn-editor [data-content-type="heading"] { margin-top: .9em; font-weight: 600; }
-.cn-editor [data-content-type="heading"][data-level="1"] .bn-inline-content { font-size: 30px; }
-.cn-editor [data-content-type="heading"][data-level="2"] .bn-inline-content { font-size: 24px; }
-.cn-editor [data-content-type="heading"][data-level="3"] .bn-inline-content { font-size: 20px; }
+.cn-editor [data-content-type="heading"] { --level: 1.75em; padding-top: 0; }
+.cn-editor [data-content-type="heading"][data-level="2"] { --level: 1.4em; }
+.cn-editor [data-content-type="heading"][data-level="3"] { --level: 1.2em; }
+.cn-editor [data-content-type="heading"] { margin-top: .7em; font-weight: 600; line-height: 1.3; }
+.cn-editor [data-content-type="divider"] hr { border: 0; border-top: 1px solid var(--cn-line-2); margin: 10px 0; }
 .cn-editor [data-content-type="quote"] blockquote, .cn-editor [data-content-type="quote"] { border-left: 3px solid currentColor; padding-left: 14px; }
 .cn-editor .bn-inline-content code, .cn-editor code { font-family: var(--cn-mono); background: var(--c-default); color: #eb5757; border-radius: 4px; padding: .2em .4em; font-size: 85%; }
 .cn-editor [data-content-type="codeBlock"] { border-radius: 6px; font-size: 14px; }
@@ -623,3 +623,9 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-ai-md ul, .cn-ai-md ol { margin: 0 0 6px; padding-left: 22px; } .cn-ai-md blockquote { margin: 0 0 6px; padding-left: 10px; border-left: 3px solid var(--cn-line-2); }
 .cn-ai-md code { font-family: var(--cn-mono); font-size: .9em; background: var(--cn-bg-3); padding: 1px 4px; border-radius: 3px; } .cn-ai-md pre { font-family: var(--cn-mono); font-size: 13px; background: var(--cn-bg-3); padding: 8px; border-radius: 4px; white-space: pre-wrap; }
 .cn-ai-md mark { background: var(--b-yellow, #fbf3db); color: inherit; }
+
+/* code block language picker: always visible (no hover on touch screens) */
+.cn-editor [data-content-type="codeBlock"] > div:first-child { position: relative; z-index: 2; }
+.cn-editor [data-content-type="codeBlock"] select { opacity: .7 !important; pointer-events: auto; cursor: pointer; color: inherit; background: transparent; border: 0; font-size: 12px; padding: 2px 4px; }
+.cn-editor [data-content-type="codeBlock"]:hover select, .cn-editor [data-content-type="codeBlock"] select:focus { opacity: 1 !important; }
+.cn-editor [data-content-type="codeBlock"] select option { color: #000; }
