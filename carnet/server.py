@@ -134,8 +134,10 @@ class Handler(BaseHTTPRequestHandler):
         log.info("%s %s", self.client_ip(), fmt % args)
 
     def client_ip(self):
+        # behind a proxy, the right-most X-Forwarded-For entry is the one the proxy itself saw; the left part is
+        # whatever the client sent and can be forged
         if self.app.c.trust_proxy and self.headers.get("X-Forwarded-For"):
-            return self.headers["X-Forwarded-For"].split(",")[0].strip()
+            return self.headers["X-Forwarded-For"].split(",")[-1].strip()
         return self.client_address[0]
 
     def send(self, status, body=b"", ctype="application/json; charset=utf-8", headers=None, cache="no-store"):
@@ -357,6 +359,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login" and method == "POST":
             return self.login()
         if path == "/api/logout" and method == "POST":
+            if self.cross_site():
+                return self.json(403, {"error": "cross-site request refused"})
             return self.json(200, {"ok": True}, headers={"Set-Cookie": self.session_cookie("", 0)})
 
         who = self.auth()
@@ -553,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
     def import_upload(self, query):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "import.zip")
         try:
-            data = self.read_to_file(max(self.app.c.max_upload_mb, 200) * 1024 * 1024)
+            data = self.read_to_file(self.app.c.max_import_mb * 1024 * 1024)
         except ValueError as e:
             return self.json(413 if "large" in str(e) else 400, {"error": f"import refused ({e})"})
         try:
