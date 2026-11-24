@@ -17,6 +17,7 @@ import { schema } from "./schema";
 import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { DocsToolbar } from "./DocsToolbar";
+import { BlockMenu } from "./BlockMenu";
 import { useTheme } from "../app/theme";
 
 /** ✨ in BlockNote's selection toolbar (desktop). */
@@ -87,6 +88,24 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     if (ids.length) return setAI({ blockIds: ids, hasSelection: true });
     setAI({ blockIds: [editor.getTextCursorPosition().block.id], hasSelection: false });
   }, [editor]);
+
+  // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
+  const [blockMenu, setBlockMenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  useEffect(() => {
+    const el = host.current;
+    if (!el || !editable) return;
+    const ctx = (e: MouseEvent) => {
+      const tg = e.target as HTMLElement;
+      if (tg.closest?.("input, textarea, select, a[href]") || !tg.closest?.(".bn-editor")) return;
+      if (!window.getSelection()?.isCollapsed) return;
+      const id = tg.closest?.(".bn-block-outer")?.getAttribute("data-id") || tg.closest?.("[data-node-type=blockContainer]")?.getAttribute("data-id");
+      if (!id) return;
+      e.preventDefault();
+      setBlockMenu({ id, at: new DOMRect(e.clientX, e.clientY, 0, 0) });
+    };
+    el.addEventListener("contextmenu", ctx);
+    return () => el.removeEventListener("contextmenu", ctx);
+  }, [editable]);
 
   // Space on an empty line opens the menu (Notion)
   useEffect(() => {
@@ -213,6 +232,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
         <SuggestionMenuController triggerCharacter="@" getItems={mentionItems} />
       </BlockNoteView>
+      {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
       {ai && <AIMenu editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );
