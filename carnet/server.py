@@ -372,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             if "large" in str(e):
                 self._drain(8 * MAX_AI_BODY)        # else the client gets a broken pipe instead of the 413
-            self.json(413 if "large" in str(e) else 400, {"error": f"request refused ({e})"})
+            self.json(413 if "large" in str(e) else 400, {"error": "too_large" if "large" in str(e) else "invalid_body"})
             return None
         try:
             data = json.loads(raw or b"{}")
@@ -380,7 +380,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("JSON object expected")
             return data
         except (ValueError, UnicodeDecodeError) as e:
-            self.json(400, {"error": f"invalid body ({e})"})
+            self.json(400, {"error": "invalid_body"})
             return None
 
     def _drain(self, limit: int):
@@ -424,13 +424,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         pid = str(body.get("page_id") or "")
         if self.app.folders.has(pid):
-            return self.json(403, {"error": "read-only page"})
+            return self.json(403, {"error": "read_only"})
         try:
             page = self.app.store.page(pid, with_rows=False)
         except NotFound:
-            return self.json(404, {"error": "not found"})
+            return self.json(404, {"error": "not_found"})
         if pid not in self.app.store.alive_ids():
-            return self.json(403, {"error": "page in the trash"})
+            return self.json(403, {"error": "in_trash"})
         command = str(body.get("command") or "")
         prompt = str(body.get("prompt") or "")
         titles = {r["id"]: r["title"] or "Untitled" for r in self.app.store.q("SELECT id, title FROM pages")}
@@ -441,43 +441,51 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("selection and context must be lists of blocks")
             selection_md = md.to_markdown(sel, title_of=titles.get).strip()
             context_md = md.to_markdown(ctx, title_of=titles.get).strip()
+            ai.check_selection(command, selection_md)
             hits = self._related(prompt or selection_md[:300], pid) if command in ("custom", "continue") else []
             history = body.get("history") or []
             messages = ai.build_messages(command=command, prompt=prompt, title=page.get("title") or "",
                                          selection_md=selection_md, context_md=context_md, hits=hits,
                                          history=history if isinstance(history, list) else [],
                                          extra_system=self.app.c.ai_system)
-        except (ValueError, TypeError, KeyError, AttributeError) as e:
-            return self.json(400, {"error": f"invalid request ({e})"})
+        except ai.Refused as e:
+            return self.json(413, {"error": e.code})
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return self.json(400, {"error": "invalid_request"})
+        if not ai.try_acquire(ai.max_concurrent()):
+            return self.json(429, {"error": "too_many_requests"}, headers={"Retry-After": "5"})
 
-        self.close_connection = True
-        self.send_response(200)
-        for k, v in (("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-store"),
-                     ("X-Accel-Buffering", "no"), ("X-Content-Type-Options", "nosniff"), ("Connection", "close")):
-            self.send_header(k, v)
-        self.end_headers()
-
-        def event(obj):
-            self.wfile.write(b"data: " + dumps(obj).encode() + b"\n\n")
-            self.wfile.flush()
-
-        stream = ai.stream_chat(self.app.c, messages, "carnet-" + secrets.token_hex(8))
         try:
-            event({"selection_md": ai.clip_selection(selection_md)})
+            self.close_connection = True
+            self.send_response(200)
+            for k, v in (("Content-Type", "text/event-stream; charset=utf-8"), ("Cache-Control", "no-store"),
+                         ("X-Accel-Buffering", "no"), ("X-Content-Type-Options", "nosniff"),
+                         ("Connection", "close")):
+                self.send_header(k, v)
+            self.end_headers()
+
+            def event(obj):
+                self.wfile.write(b"data: " + dumps(obj).encode() + b"\n\n")
+                self.wfile.flush()
+
+            stream = ai.relay(ai.stream_chat(self.app.c, messages, "carnet-" + secrets.token_hex(8)))
             try:
+                event({"selection_md": ai.clip_selection(selection_md)})
                 for delta in stream:
                     if delta:
                         event({"delta": delta})
-                    else:                                   # keepalive: a write is how a gone client shows up
+                    else:                               # keepalive: a write is how a gone client shows up
                         self.wfile.write(b": \n\n")
                         self.wfile.flush()
+                event({"done": True})
             except ai.UpstreamError as e:
-                return event({"error": str(e)})
-            event({"done": True})
+                event(e.payload())
+            finally:
+                stream.close()
         except (BrokenPipeError, ConnectionResetError):
             log.info("AI request cancelled by the client")
         finally:
-            stream.close()
+            ai.release()
 
     def ai_blocks(self):
         body = self._ai_body()
@@ -485,9 +493,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         text = body.get("markdown")
         if not isinstance(text, str):
-            return self.json(400, {"error": "markdown expected"})
+            return self.json(400, {"error": "markdown_expected"})
         if len(text) > MAX_AI_MARKDOWN:
-            return self.json(413, {"error": "too large"})
+            return self.json(413, {"error": "too_large"})
         return self.json(200, {"blocks": md.to_blocks(text, resolve=self.app.store.resolve_title)})
 
     # ------------------------------------------------------------------ uploads & files
