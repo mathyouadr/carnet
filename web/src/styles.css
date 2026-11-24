@@ -732,3 +732,19 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
   .cn-app .cn-ai-fab { width: 44px; height: 44px; padding: 0 !important; justify-content: center; right: 22px !important; bottom: calc(84px + var(--cn-bottom)); background: var(--cn-bg-3); border: 1px solid var(--cn-line-2); color: #b197fc; }
   .cn-app .cn-ai-fab .cn-ai-fab-tx { display: none; }
 }
+/* phone: denser layout (it felt zoomed in), smaller floating buttons */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+  .cn-editor .bn-editor { font-size: 15px; }
+  .cn-top { height: calc(44px + env(safe-area-inset-top)); }
+  .cn-top .cn-icon-btn { width: 34px; height: 36px; }
+  .cn-mode-toggle { height: 32px; padding: 0 11px; font-size: 13px; gap: 5px; }
+  .cn-crumb a { font-size: 14px; }
+  .cn-cover { height: 15vh; min-height: 90px; }
+  .cn-page-icon { font-size: 44px; }
+  .cn-title { font-size: 26px; }
+  .cn-page-inner:not(.has-cover) { padding-top: 16px; }
+  .cn-edit-fab { width: 50px; height: 50px; right: 14px; bottom: calc(14px + var(--cn-bottom)); }
+  .cn-edit-fab svg { width: 20px; height: 20px; }
+  .cn-app .cn-ai-fab { width: 40px; height: 40px; right: 19px !important; bottom: calc(74px + var(--cn-bottom)); }
+}
