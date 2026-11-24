@@ -43,14 +43,15 @@ export function mergeBlocks(oldBlocks: any[], newBlocks: any[]): Hunk[] {
   return hunks;
 }
 
-/** How much text the merge removes: blocks removed, text blocks before. */
-export function removalStats(oldBlocks: any[], hunks: Hunk[]): { removed: number; total: number } {
+/** How much text the merge removes (blocks and characters) and puts back. */
+export function removalStats(oldBlocks: any[], hunks: Hunk[]): { removed: number; total: number; removedChars: number; insertedChars: number } {
   const total = oldBlocks.filter((b) => isText(b) && plain(b).trim()).length;
-  const removed = hunks.reduce((s, h) => s + h.remove.filter((b) => plain(b).trim()).length, 0);
-  return { removed, total };
+  const gone = hunks.flatMap((h) => h.remove).filter((b) => plain(b).trim());
+  const len = (bs: any[]) => bs.reduce((n, b) => n + plain(b).length, 0);
+  return { removed: gone.length, total, removedChars: len(gone), insertedChars: len(hunks.flatMap((h) => h.insert)) };
 }
 
-/** A merge that wipes most of the text: shown as a warning, never applied silently. */
-export function destructive(s: { removed: number; total: number }): boolean {
-  return s.total >= 3 && s.removed / s.total > 0.5;
+/** A merge that wipes most of the text without putting text back (a translation or a rewrite is not one): warned, never silent. */
+export function destructive(s: { removed: number; total: number; removedChars: number; insertedChars: number }): boolean {
+  return s.total >= 3 && s.removed / s.total > 0.5 && s.insertedChars < s.removedChars * 0.5;
 }

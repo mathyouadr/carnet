@@ -95,6 +95,9 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     const ids: string[] = (sel?.blocks || []).map((b: any) => b.id);
     if (ids.length) return setAI({ blockIds: ids, hasSelection: true });
     const cur = editor.getTextCursorPosition().block;
+    // text selected inside one block: getSelection() reports nothing for it, but it is a selection all the same
+    const inBlock = editor.prosemirrorState?.selection && !editor.prosemirrorState.selection.empty;
+    if (inBlock && Array.isArray(cur.content)) return setAI({ blockIds: [cur.id], hasSelection: true });
     const filled = (b: any) => !Array.isArray(b.content) || b.content.length > 0 || (b.children || []).length > 0;
     if (scope === "page") {
       const all: any[] = editor.document;
@@ -360,11 +363,18 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
           <Sparkles size={18} /><span className="cn-ai-fab-tx">{t("Ask AI")}</span>
         </button>
       )}
+      {aiAvailable && !editable && app.mobile && !chat && (
+        <button type="button" aria-label={t("Chat")} title={t("Chat")}
+          className="cn-btn cn-ai-fab cn-chat-fab" style={{ position: "fixed", right: 16, zIndex: 30, display: "flex", alignItems: "center", gap: 6, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}
+          onClick={() => setChat(true)}>
+          <MessageCircle size={18} /><span className="cn-ai-fab-tx">{t("Chat")}</span>
+        </button>
+      )}
       {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
       {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
       {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onClose={() => setMultiMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
-      {chat && aiAvailable && <ChatPanel key={page.id} editor={editor} pageId={page.id} onClose={() => setChat(false)} />}
+      {chat && aiAvailable && <ChatPanel key={page.id} editor={editor} pageId={page.id} canInsert={editable} onClose={() => setChat(false)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );

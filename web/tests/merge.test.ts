@@ -27,7 +27,8 @@ test("blocks without text are never removed", () => {
   assert.equal(h.length, 0);
 });
 test("an answer that is only the addition is flagged as destructive", () => {
-  const old = [p("1", "a"), p("2", "b"), p("3", "c"), p("4", "d")];
+  const long = (c: string) => c.repeat(80);
+  const old = [p("1", long("a")), p("2", long("b")), p("3", long("c")), p("4", long("d"))];
   const h = mergeBlocks(old, [p("n", "just the new part")]);
   assert.equal(removalStats(old, h).removed, 4);
   assert.ok(destructive(removalStats(old, h)));
@@ -35,4 +36,11 @@ test("an answer that is only the addition is flagged as destructive", () => {
 test("a small edit is not destructive", () => {
   const old = [p("1", "a"), p("2", "b"), p("3", "c")];
   assert.ok(!destructive(removalStats(old, mergeBlocks(old, [p("x", "a"), p("y", "b2"), p("z", "c")]))));
+});
+
+test("a translation (everything replaced by as much text) is not destructive", () => {
+  const old = [p("1", "Le chat dort"), p("2", "Le chien court"), p("3", "L'oiseau chante")];
+  const h = mergeBlocks(old, [p("a", "The cat sleeps"), p("b", "The dog runs"), p("c", "The bird sings")]);
+  assert.equal(removalStats(old, h).removed, 3);
+  assert.ok(!destructive(removalStats(old, h)));
 });

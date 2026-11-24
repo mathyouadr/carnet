@@ -19,7 +19,7 @@ function errText(e: any): string {
   return t("AI request failed");
 }
 
-export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: string; onClose: () => void }) {
+export function ChatPanel({ editor, pageId, canInsert, onClose }: { editor: any; pageId: string; canInsert: boolean; onClose: () => void }) {
   const models = BOOT.ai?.models?.length ? BOOT.ai.models : [BOOT.ai?.name || "AI"];
   const [model, setModel] = useState(() => {
     const saved = localStorage.getItem(MODEL_KEY) || "";
@@ -106,7 +106,7 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <span className="cn-chat-sp" />
-        {!!msgs.some((m) => m.role === "assistant" && m.content) && !busy && <>
+        {canInsert && !!msgs.some((m) => m.role === "assistant" && m.content) && !busy && <>
           <button type="button" className="cn-chat-ic" title={t("Add the conversation at the end of the page")} aria-label={t("Add the conversation at the end of the page")}
             onClick={() => insert(conversationMd(), "end", "all-e")}>{done === "all-e" ? <Check size={15} /> : <ArrowDownToLine size={15} />}</button>
           <button type="button" className="cn-chat-ic" title={t("Add the conversation under the cursor")} aria-label={t("Add the conversation under the cursor")}
@@ -126,7 +126,7 @@ export function ChatPanel({ editor, pageId, onClose }: { editor: any; pageId: st
               {m.content
                 ? <div className="cn-ai-md" dangerouslySetInnerHTML={{ __html: chatHtml(stripFence(m.content), mdPreview) }} />
                 : <span className="cn-ai-thinking">…</span>}
-              {m.content && !(busy && i === msgs.length - 1) && (
+              {canInsert && m.content && !(busy && i === msgs.length - 1) && (
                 <div className="cn-chat-acts">
                   <button type="button" className="cn-chat-ins" onClick={() => insert(m.content, "end", `e${i}`)}>
                     {done === `e${i}` ? <Check size={13} /> : <ArrowDownToLine size={13} />}{done === `e${i}` ? t("Inserted") : t("At the end of the page")}</button>

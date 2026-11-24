@@ -823,3 +823,4 @@ body.cn-marquee-on { user-select: none; -webkit-user-select: none; cursor: defau
 html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inset-top) + 12px); }
 
 @media (max-width: 760px) { .cn-chat.full { padding-bottom: calc(env(safe-area-inset-bottom) + var(--cn-bottom, 0px)); } }
+.cn-chat-fab { transform: translateY(-54px); }
