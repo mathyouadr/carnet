@@ -7,7 +7,7 @@ const FR: Record<string, string> = {
   "Add to favorites": "Ajouter aux favoris", "Remove from favorites": "Retirer des favoris",
   "Cut": "Couper", "Copy": "Copier", "Paste": "Coller", "Code": "Code", "Clipboard access refused: use Ctrl V": "Accès au presse-papiers refusé : utilise Ctrl V", "Clipboard is empty": "Presse-papiers vide",
   "Presentation": "Présentation", "Text document": "Document texte", "Spreadsheet": "Tableur", "Archive": "Archive", "Text file": "Fichier texte", "Hide preview": "Masquer l'aperçu", "Preview": "Aperçu", "Download": "Télécharger",
-  "Turn into": "Transformer en", "Move up": "Monter", "Move down": "Descendre",
+  "Turn into": "Transformer en", "{n} selected": "{n} sélectionnée(s)", "Move up": "Monter", "Move down": "Descendre",
   "Duplicate": "Dupliquer", "Move to": "Déplacer vers", "Delete": "Supprimer", "Move to trash": "Mettre à la corbeille",
   "Page history": "Historique de la page", "Export as Markdown": "Exporter en Markdown", "Export as PDF": "Exporter en PDF",
   "Export as CSV": "Exporter en CSV", "Full width": "Pleine largeur", "Small text": "Petit texte", "Font": "Police",

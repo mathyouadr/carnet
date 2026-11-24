@@ -9,6 +9,7 @@ import { t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
 import { applyView, changedPropValues, newId, propsFromFilters, withOptionsFor } from "./model";
 import { BoardView, CalendarView, GalleryView, ListView, TableView } from "./Views";
+import { RowSelCtx, useRowSelect } from "./rowSelect";
 import { FilterEditor, filterLabel, RenameInline, SortEditor, VisibilityEditor } from "./Menus";
 
 export const VIEW_TYPES: { type: View["type"]; label: string; icon: any }[] = [
@@ -60,6 +61,9 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   // the parent re-renders with a new ``initial`` on every title keystroke, which must not reset the rows
   useEffect(() => { if (initial && initial.id === dbId) commit(initial); else load(); }, [dbId]);  // eslint-disable-line
   useChanged(dbId, load);
+  // rectangle selection of cards / rows (before the early returns below: hooks keep their order)
+  const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
+  const rowSel = useRowSelect({ root: rootEl, dbId, inline, readOnly: !!readOnly, reload: load });
 
   if (err) return <div className="cn-db-missing">{err}</div>;
   if (!db || !db.schema || !db.views) return <div className="cn-db-loading">{t("Loading…")}</div>;
@@ -145,7 +149,8 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   };
 
   return (
-    <div className={`cn-db ${inline ? "inline" : "full"}`}>
+    <RowSelCtx.Provider value={rowSel.ctx}>
+    <div ref={setRootEl} className={`cn-db ${inline ? "inline" : "full"}`}>
       {inline && (
         <div className="cn-db-title">
           <span className="ic">{db.icon || "🗂️"}</span>
@@ -298,5 +303,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
         </Popover>
       )}
     </div>
+    {rowSel.layer}
+    </RowSelCtx.Provider>
   );
 }

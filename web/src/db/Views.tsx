@@ -5,6 +5,7 @@ import { useApp } from "../app/store";
 import { LANG, t } from "../i18n";
 import { Popover } from "../ui/Popover";
 import { PageMenu, useContextTrigger } from "../app/PageMenu";
+import { useRowSel } from "./rowSelect";
 import { coverStyle } from "../ui/Pickers";
 import { OpenButton, PropValue, ValueView } from "./Cell";
 import { AddProperty, PropertyMenu } from "./Menus";
@@ -48,6 +49,7 @@ function TitleCell({ row, readOnly, onDone, autoEdit, open }: { row: Row; readOn
 
 // ================================================================== table
 export function TableView({ rows, schema, view, readOnly, onRow, onAdd, onSchema, onView, open }: ViewProps) {
+  const sel = useRowSel();
   const props = visibleProps(schema, view);
   const [menu, setMenu] = useState<{ el: HTMLElement; prop: Property | null; title?: boolean } | null>(null);
   const [addEl, setAddEl] = useState<HTMLElement | null>(null);
@@ -91,7 +93,7 @@ export function TableView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
           {!readOnly && <div className="cn-th add" onClick={(e) => setAddEl(e.currentTarget)}><Plus size={15} /></div>}
         </div>
         {rows.map((r) => (
-          <div key={r.id} className="cn-tr">
+          <div key={r.id} className={`cn-tr ${sel?.ids.has(r.id) ? "sel" : ""}`} data-row={r.id}>
             <div className="cn-td" style={{ width: w(TITLE) }}>
               <TitleCell row={r} readOnly={readOnly} autoEdit={fresh === r.id} open={() => open(r.id)} onDone={(v) => { setFresh(null); onRow(r.id, { title: v }); }} />
             </div>
@@ -133,11 +135,15 @@ function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
   const app = useApp();
   const [menu, setMenu] = useState<DOMRect | null>(null);
   const page = app.byId.get(row.id);
-  const ctx = useContextTrigger((at) => page && setMenu(at));
+  const sel = useRowSel();
+  const picked = !!sel?.ids.has(row.id);
+  // right-click on a card of a multi-selection: one menu for all of them
+  const ctx = useContextTrigger((at) => { if (picked && sel!.ids.size > 1) sel!.menu(at); else { sel?.clear(); if (page) setMenu(at); } });
   return (
     <>
     {menu && page && <PageMenu page={page} anchor={menu} onClose={() => setMenu(null)} />}
-    <div className="cn-card" onClick={open} draggable={draggable} onDragStart={onDragStart} {...(page ? ctx : {})}>
+    <div className={`cn-card ${picked ? "sel" : ""}`} data-row={row.id}
+      onClick={(e) => { if (sel && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sel.toggle(row.id); } else open(); }} draggable={draggable} onDragStart={onDragStart} {...(page ? ctx : {})}>
       {cover && mode === "cover" && row.cover && <div className="cn-card-cover" style={coverStyle(row.cover)} />}
       {cover && mode === "content" && <div className="cn-card-preview">{row.preview}</div>}
       <div className="cn-card-body">
@@ -242,10 +248,12 @@ export function BoardView({ rows, schema, view, readOnly, onRow, onAdd, onSchema
 // ================================================================== list
 export function ListView({ rows, schema, view, readOnly, onAdd, open }: ViewProps) {
   const props = visibleProps(schema, view);
+  const sel = useRowSel();
   return (
     <div className="cn-list">
       {rows.map((r) => (
-        <div key={r.id} className="cn-list-row" onClick={() => open(r.id)}>
+        <div key={r.id} className={`cn-list-row ${sel?.ids.has(r.id) ? "sel" : ""}`} data-row={r.id}
+          onClick={(e) => { if (sel && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sel.toggle(r.id); } else open(r.id); }}>
           <span className="ic">{r.icon || <FileText size={15} />}</span>
           <span className="tx">{r.title || <span className="cn-placeholder">{t("Untitled")}</span>}</span>
           <span className="props">{props.filter((p) => !isEmpty(valueOf(r, p.id, schema))).slice(0, 4).map((p) => <ValueView key={p.id} prop={p} value={valueOf(r, p.id, schema)} compact />)}</span>

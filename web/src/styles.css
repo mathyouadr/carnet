@@ -780,3 +780,10 @@ i.bgbar-default { background: transparent !important; border: 1px solid var(--cn
 .cn-editor.bsel .bn-editor ::selection { background: transparent; }
 body.cn-marquee-on { user-select: none; -webkit-user-select: none; cursor: default; }
 @media print { .cn-bsel-layer { display: none; } }
+
+/* ---- Notion-style selection of cards / rows in database views (db/rowSelect.tsx) ---- */
+.cn-card.sel, .cn-list-row.sel, .cn-tr.sel { position: relative; }
+.cn-card.sel { box-shadow: 0 0 0 1px color-mix(in srgb, var(--cn-accent) 55%, transparent), 0 2px 4px rgba(15,15,15,.06); }
+.cn-card.sel::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: color-mix(in srgb, var(--cn-accent) 24%, transparent); border-radius: inherit; }
+.cn-list-row.sel, .cn-tr.sel { background: color-mix(in srgb, var(--cn-accent) 18%, transparent); }
+.cn-marquee.fixed { position: fixed; z-index: 60; pointer-events: none; }
