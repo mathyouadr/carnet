@@ -32,6 +32,16 @@ function useSaveState() {
 function useModeFor(page: { id: string; locked?: boolean } | null, mobile: boolean) {
   const [mode, setMode] = useState<Record<string, "edit" | "read">>({});
   const def = page?.locked ? "read" : mobile ? "read" : "edit";
+  const id = page?.id;
+  useEffect(() => {     // the editor's mobile AI button asks for edit mode (Editor.tsx)
+    if (!id) return;
+    const on = (e: Event) => {
+      const m = (e as CustomEvent).detail;
+      if (m === "edit" || m === "read") setMode((x) => ({ ...x, [id]: m }));
+    };
+    window.addEventListener("carnet:mode", on);
+    return () => window.removeEventListener("carnet:mode", on);
+  }, [id]);
   return {
     mode: page ? mode[page.id] || def : "edit",
     set: (m: "edit" | "read") => page && setMode((x) => ({ ...x, [page.id]: m })),
