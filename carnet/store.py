@@ -457,22 +457,34 @@ class Store:
 
     def delete_forever(self, pid):
         self._row(pid)
-        ids = [pid] + self.descendants(pid)
+        return {"ok": True, "deleted": self._purge([pid])}
+
+    def _purge(self, roots) -> int:
+        """Delete pages and everything under them, in one transaction. A root already removed by an ancestor
+        (trashed parent and child) is skipped, so a purge can't stop half way. Returns the number of pages."""
+        ids = []
         with self.tx():
+            for root in roots:
+                if self.q1("SELECT 1 FROM pages WHERE id=?", (root,)) is None:
+                    continue
+                for i in [root] + self.descendants(root):
+                    if i not in ids:
+                        ids.append(i)
             for i in ids:
                 self.x("DELETE FROM pages WHERE id=?", (i,))
                 self.x("DELETE FROM versions WHERE page_id=?", (i,))
                 self.x("DELETE FROM links WHERE src=? OR dst=?", (i, i))
                 if self.fts:
                     self.x("DELETE FROM search WHERE id=?", (i,))
-        return {"ok": True, "deleted": len(ids)}
+        return len(ids)
+
+    def empty_trash(self) -> int:
+        return self._purge([r["id"] for r in self.q("SELECT id FROM pages WHERE trashed_at IS NOT NULL")])
 
     def purge_trash(self, days=TRASH_DAYS):
         limit = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-        n = 0
-        for r in self.q("SELECT id FROM pages WHERE trashed_at IS NOT NULL AND trashed_at < ?", (limit,)):
-            n += self.delete_forever(r["id"])["deleted"]
-        return n
+        return self._purge([r["id"] for r in self.q(
+            "SELECT id FROM pages WHERE trashed_at IS NOT NULL AND trashed_at < ?", (limit,))])
 
     def duplicate(self, pid, parent_id="__same__", as_template=None, title=None) -> dict:
         """Deep copy of a page and everything under it. Links inside the copied subtree follow the copy."""

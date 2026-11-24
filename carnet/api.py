@@ -181,10 +181,7 @@ class API:
         return self.s.create({**b, "parent_id": pid, "kind": "page"})
 
     def empty_trash(self, b, q):
-        n = 0
-        for p in self.s.trashed():
-            n += self.s.delete_forever(p["id"])["deleted"]
-        return {"ok": True, "deleted": n}
+        return {"ok": True, "deleted": self.s.empty_trash()}
 
 
 def _matches(prop, value, wanted: str) -> bool:

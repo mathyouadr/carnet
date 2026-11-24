@@ -108,6 +108,14 @@ class ChunkedAndLimitTests(ServerCase):
 
 
 class ApiInputTests(ServerCase):
+    def test_empty_trash_over_http_with_parent_and_child(self):
+        st, a = self.call("POST", "/api/pages", {"title": "A"})
+        st, b = self.call("POST", "/api/pages", {"title": "B", "parent_id": a["id"]})
+        self.call("DELETE", f"/api/pages/{b['id']}")
+        self.call("DELETE", f"/api/pages/{a['id']}")
+        st, out = self.call("POST", "/api/trash/empty")
+        self.assertEqual((st, out.get("deleted")), (200, 2), out)
+
     def test_nan_literal_in_body_is_refused(self):
         st, _, data = self.raw("POST", "/api/pages", b'{"title":"x","props":{"n":NaN}}',
                                {"Content-Type": "application/json"})
@@ -225,6 +233,14 @@ class StoreRegressionTests(unittest.TestCase):
         self.assertEqual(self.s.trashed(), [])
         with self.assertRaises(NotFound):
             self.s.page(a["id"])
+
+    def test_empty_trash_with_parent_and_child_answers_200(self):
+        a = self.s.create({"title": "A"})
+        b = self.s.create({"title": "B", "parent_id": a["id"]})
+        self.s.trash(b["id"])
+        self.s.trash(a["id"])
+        self.assertEqual(self.s.empty_trash(), 2)
+        self.assertEqual(self.s.trashed(), [])
 
     def test_pages_cannot_be_created_under_a_trashed_parent(self):
         parent = self.s.create({"title": "P"})
