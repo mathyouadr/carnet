@@ -18,7 +18,8 @@ import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
-import { BlockMenu, SelectionMenu } from "./BlockMenu";
+import { BlockMenu, BlocksMenu, SelectionMenu } from "./BlockMenu";
+import { BlockSelectLayer, useBlockSelect } from "./blockSelect";
 import { PageMenu } from "../app/PageMenu";
 import { useTheme } from "../app/theme";
 
@@ -127,6 +128,11 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     return () => { stop(); document.removeEventListener("dragover", over, true); document.removeEventListener("dragend", stop, true); document.removeEventListener("drop", stop, true); };
   }, []);
 
+  // Notion block selection (marquee from the margins, Esc, Shift+arrows)
+  const bsel = useBlockSelect(editor, host, editable && !page.readonly, page.id);
+  const bselRef = useRef(bsel); bselRef.current = bsel;
+  const [multiMenu, setMultiMenu] = useState<DOMRect | null>(null);
+  useEffect(() => setMultiMenu(null), [page.id]);
   // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
   const [selMenu, setSelMenu] = useState<DOMRect | null>(null);
   const [pageMenu, setPageMenu] = useState<DOMRect | null>(null);
@@ -150,6 +156,11 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       const tg = e.target as HTMLElement;
       if (tg.closest?.("input, textarea:not(.cn-title), select, a[href], .cn-pop")) return;
       if (tg.closest?.("button") && tg.closest?.(".bn-editor")) return;
+      const bs = bselRef.current;
+      if (bs.active) {                                   // blocks are selected: one menu for all of them
+        if (bs.hits(e.clientY)) { e.preventDefault(); setMultiMenu(new DOMRect(e.clientX, e.clientY, 0, 0)); return; }
+        bs.clear();
+      }
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && el.querySelector(".bn-editor")?.contains(sel.anchorNode)) {
         e.preventDefault();
@@ -308,6 +319,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
 
   return (
     <div ref={host} className={`cn-editor ${editable ? "edit" : "read"}`}>
+      <BlockSelectLayer rects={bsel.rects} box={bsel.box} />
       {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? openAI : undefined} />}
       <BlockNoteView editor={editor} editable={editable} theme={theme} onChange={() => onChange(editor.document as any[])}
         slashMenu={false} formattingToolbar={!app.mobile && !aiOn} sideMenu={editable && !app.mobile} emojiPicker>
@@ -334,6 +346,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       )}
       {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
       {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
+      {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onClose={() => setMultiMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
