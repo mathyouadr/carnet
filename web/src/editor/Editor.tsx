@@ -19,6 +19,7 @@ import { AIMenu, aiName } from "./ai/AIMenu";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
 import { BlockMenu } from "./BlockMenu";
+import { PageMenu } from "../app/PageMenu";
 import { useTheme } from "../app/theme";
 
 /** ✨ in BlockNote's selection toolbar (desktop). */
@@ -101,6 +102,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   }, [aiOn, page.id, openAI]);
 
   // right-click on a block (Notion): its own menu, unless text is selected (browser menu: copy, paste)
+  const [pageMenu, setPageMenu] = useState<DOMRect | null>(null);
   const [blockMenu, setBlockMenu] = useState<{ id: string; at: DOMRect } | null>(null);
   useEffect(() => {
     const el = host.current;
@@ -119,13 +121,18 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     };
     const ctx = (e: MouseEvent) => {
       const tg = e.target as HTMLElement;
-      if (tg.closest?.("input, textarea, select, a[href], button, .cn-pop")) return;
+      if (tg.closest?.("input, textarea:not(.cn-title), select, a[href], .cn-pop")) return;
+      if (tg.closest?.("button") && tg.closest?.(".bn-editor")) return;
       if (!window.getSelection()?.isCollapsed) return;
       let id: string | null | undefined;
       if (tg.closest?.(".bn-editor")) id = idOf(tg);
       if (!id) {
         const first = el.querySelector(".bn-block-content")?.getBoundingClientRect();
-        if (!first || e.clientY < first.top) return; // title, cover, properties: browser menu
+        if (!first || e.clientY < first.top) { // title, cover, properties, empty page: the page's own menu
+          e.preventDefault();
+          setPageMenu(new DOMRect(e.clientX, e.clientY, 0, 0));
+          return;
+        }
         id = idOf(blockAt(e.clientY));
       }
       if (!id) return;
@@ -293,6 +300,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
           <Sparkles size={16} />{t("Ask AI")}
         </button>
       )}
+      {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
