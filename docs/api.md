@@ -5,7 +5,11 @@ JSON over HTTP, under `<base>/api/`. Authentication: the session cookie of the w
 the API is open (trusted networks only).
 
 Browser-reachable writes (cookie or no auth) must be JSON (`Content-Type: application/json`) and same-origin:
-anything a foreign web page could forge is refused (415 / 403).
+anything a foreign web page could forge is refused (415 / 403). `POST /api/logout` is checked the same way.
+
+Request bodies may be sent with `Content-Length` or `Transfer-Encoding: chunked`. A body over its limit
+(32 MB for JSON, `CARNET_MAX_UPLOAD_MB` for files, `CARNET_MAX_IMPORT_MB` for imports) gets **413**.
+JSON bodies must be strict JSON: `NaN` and `Infinity` are refused (400).
 
 ## Pages
 
@@ -15,15 +19,15 @@ Everything is a page. `kind` is `page` (a document) or `database`. A page whose 
 |---|---|---|---|
 | GET | `/api/bootstrap` | | `{info, settings, tree}` — every live page, without contents |
 | GET | `/api/pages` | `?parent_id=` `?q=` `?templates=1` | `{results: [summary]}` |
-| POST | `/api/pages` | `{title, parent_id, kind, icon, cover, content \| markdown, props, is_template, schema, views}` | the page |
+| POST | `/api/pages` | `{title, parent_id, kind, icon, cover, content \| markdown, props, is_template, schema, views}` | the page; `400` when `parent_id` is in the trash; `content` must be a list of block objects |
 | GET | `/api/pages/{id}` | `?format=markdown` | the page: `content` (BlockNote blocks), `props`, `path`, `backlinks`, `children`; databases add `schema`, `views`, `rows`; rows add `database` |
 | GET | `/api/pages/{id}/markdown` | | `{id, markdown}` |
 | GET | `/api/pages/{id}/export.md` | | file download |
 | POST | `/api/pages/{id}` | any of `title, icon, cover, content, markdown (+ append: true), props (+ merge_props: false), options, favorite, is_template, schema, views, rev` | the page; `409` with the current page when `rev` is stale |
-| POST | `/api/pages/{id}/move` | `{parent_id, index}` | the page |
+| POST | `/api/pages/{id}/move` | `{parent_id, index}` | the page; `400` when the new parent is in the trash |
 | POST | `/api/pages/{id}/duplicate` | | the copy (sub-pages included) |
 | DELETE | `/api/pages/{id}` | `?forever=1` | moves to the trash (or deletes) |
-| POST | `/api/pages/{id}/restore` | | back from the trash |
+| POST | `/api/pages/{id}/restore` | | back from the trash; keeps its parent, unless the parent is gone or itself in the trash (then root) |
 | GET | `/api/pages/{id}/versions` | | `{results: [{id, created_at, title}]}` |
 | GET | `/api/versions/{vid}` | | a version with its content |
 | POST | `/api/versions/{vid}/restore` | | the page |
@@ -58,21 +62,22 @@ A schema is `{title_name, properties: [{id, name, type, options?, database_id?, 
 
 | Method | Path | |
 |---|---|---|
-| GET | `/api/search?q=&limit=` | full-text search with snippets (`\u0002`/`\u0003` mark the hits) |
-| GET | `/api/trash` · POST `/api/trash/empty` | |
+| GET | `/api/search?q=&limit=` | full-text search with snippets (`\u0002`/`\u0003` mark the hits); `limit` is clamped to 1..200 |
+| GET | `/api/trash` · POST `/api/trash/empty` | emptying answers `{deleted}` (pages removed, sub-pages included) |
 | POST | `/api/templates/{id}/use` | `{parent_id, title}` → a copy of the template |
-| POST | `/api/favorites/order` | `{ids}` |
+| POST | `/api/favorites/order` | `{ids: [page id, ...]}`; anything else is `400` |
 | GET / POST | `/api/settings` | free-form key/value settings |
 | POST | `/api/files` | raw body, headers `X-Carnet-Upload: 1`, `X-Filename`, `Content-Type` → `{url}` |
 | POST | `/api/import?parent_id=&databases=0` | raw `.zip` or `.md`, same headers → `{pages, databases, files, templates, root_id}` |
 | GET | `/api/export.zip?root=` | everything (or one subtree) as Markdown |
+| GET | `/files/{id}/{name}` | an uploaded file; `Range: bytes=a-b` (one range) answers **206**, unsatisfiable ranges **416** |
 | GET | `/healthz` | `{ok, version}` |
 
 ## Markdown folders (read-only)
 
 With `CARNET_MD_FOLDERS=Name=/path`, the pages of a Markdown folder show up in `/api/bootstrap`, `/api/pages`,
 `/api/pages/{id}` (content converted on the fly, `readonly: true`, `source: {folder, path}`), `/api/search` and backlinks.
-Their ids start with `md`. `?format=markdown` returns the file itself. Any POST / DELETE on them, or creating a page
+Their ids start with `md`. `?format=markdown` returns the file itself; `/api/pages/{id}/export.md` works for them too. Any POST / DELETE on them, or creating a page
 inside them, answers **403**: edit the file instead.
 
 ## AI assistant
