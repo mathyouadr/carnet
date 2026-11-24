@@ -9,13 +9,14 @@ import {
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { getMultiColumnSlashMenuItems, multiColumnDropCursor, locales as mcLocales } from "@blocknote/xl-multi-column";
 import { syntaxHighlighter } from "@blocknote/code-block";
-import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Plus, Sparkles } from "lucide-react";
+import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Plus, Sparkles, MessageCircle } from "lucide-react";
 import { api, BOOT, fileUrl, Page } from "../api";
 import { useApp } from "../app/store";
 import { LANG, t } from "../i18n";
 import { schema } from "./schema";
 import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
+import { ChatPanel } from "./ai/ChatPanel";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
 import { BlockMenu, BlocksMenu, SelectionMenu } from "./BlockMenu";
@@ -86,7 +87,8 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   const aiAvailable = !!BOOT.ai?.enabled && !page.readonly && !page.in_trash;
   const aiOn = aiAvailable && editable;
   const [ai, setAI] = useState<{ blockIds: string[]; hasSelection: boolean } | null>(null);
-  useEffect(() => setAI(null), [page.id]);               // a menu belongs to the page it was opened on
+  const [chat, setChat] = useState(false);
+  useEffect(() => { setAI(null); setChat(false); }, [page.id]);               // a menu belongs to the page it was opened on
   // scope "page": the whole page (toolbar button); "here": the block under the cursor (/ia); default: selection, else cursor
   const openAI = useCallback((scope?: "page" | "here") => {
     const sel = editor.getSelection();
@@ -301,9 +303,15 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       icon: <Sparkles size={18} />,
       onItemClick: () => setTimeout(() => openAI("here"), 0),
     }] : [];
+    const chatItems: any[] = aiAvailable ? [{
+      title: t("Chat"), subtext: t("Ask questions about this page"), group: t("AI"),
+      aliases: ["chat", "chatbot", "discuter", "question"],
+      icon: <MessageCircle size={18} />,
+      onItemClick: () => setTimeout(() => setChat(true), 0),
+    }] : [];
     const defaults = getDefaultReactSlashMenuItems(editor);
-    return filterSuggestionItems([...aiItems, ...combineByGroup(defaults, getMultiColumnSlashMenuItems(editor), custom as any)] as any, query) as any;
-  }, [editor, page.id, app, aiOn, openAI]);
+    return filterSuggestionItems([...aiItems, ...chatItems, ...combineByGroup(defaults, getMultiColumnSlashMenuItems(editor), custom as any)] as any, query) as any;
+  }, [editor, page.id, app, aiOn, aiAvailable, openAI]);
 
   const mentionItems = useMemo(() => async (query: string): Promise<DefaultReactSuggestionItem[]> => {
     const q = query.toLowerCase();
@@ -328,7 +336,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   return (
     <div ref={host} className={`cn-editor ${editable ? "edit" : "read"}`}>
       <BlockSelectLayer rects={bsel.rects} box={bsel.box} />
-      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? () => openAI("page") : undefined} />}
+      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? () => openAI("page") : undefined} onChat={aiAvailable ? () => setChat((c) => !c) : undefined} />}
       <BlockNoteView editor={editor} editable={editable} theme={theme} onChange={() => onChange(editor.document as any[])}
         slashMenu={false} formattingToolbar={!app.mobile && !aiOn} sideMenu={editable && !app.mobile} emojiPicker>
         {aiOn && !app.mobile && (
@@ -356,6 +364,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
       {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onClose={() => setMultiMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
+      {chat && aiAvailable && <ChatPanel key={page.id} editor={editor} pageId={page.id} onClose={() => setChat(false)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );

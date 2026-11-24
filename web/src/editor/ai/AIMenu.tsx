@@ -13,6 +13,8 @@ import { sanitize } from "../sanitize";
 import { aiBlocks, aiStream, AIError } from "./stream";
 import type { AIMessage, AIRequest } from "./stream";
 import { askedText, canReplace, fingerprint, historyFor, selectionTooLong } from "./policy";
+import { mergeBlocks, removalStats, destructive } from "./merge";
+import type { Hunk } from "./merge";
 import { mdPreview, mdText, stripFence, wordDiff } from "./text";
 
 type Cmd = { id: string; label: string; icon: ReactNode };
@@ -90,6 +92,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
   const [stale, setStale] = useState(false);
   const [partial, setPartial] = useState(false);       // stopped before the end: the answer is cut
   const [followup, setFollowup] = useState("");
+  const [plan, setPlan] = useState<{ hunks: Hunk[]; removed: number; total: number; wipe: boolean } | null>(null);
   const [last, setLast] = useState<{ command: string; prompt: string; history: AIMessage[]; rewrite: boolean } | null>(null);
   const ctrl = useRef<AbortController | null>(null);
   const snap = useRef("");                             // the blocks the answer is about (ids + content)
@@ -132,7 +135,7 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
     ctrl.current = c;
     const kept = historyFor(history);
     setLast({ command, prompt, history: kept, rewrite });
-    setAnswer(""); setError(""); setStale(false); setFollowup(""); setPartial(false);
+    setAnswer(""); setError(""); setStale(false); setFollowup(""); setPartial(false); setPlan(null);
     snap.current = fingerprint(blocksNow());
     setPhase("stream");
     let text = "";
@@ -143,6 +146,15 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       }, c.signal);
       if (c.signal.aborted) return;
       if (!stripFence(text)) throw new Error(t("Empty answer"));
+      if (rewrite) {                                   // what Replace would really change, worked out once the answer is complete
+        try {
+          const now = blocksNow();
+          const hunks = mergeBlocks(now, sanitize(await aiBlocks(stripFence(text))));
+          const st = removalStats(now, hunks);
+          if (!c.signal.aborted) setPlan({ hunks, ...st, wipe: destructive(st) });
+        } catch { /* Replace works it out again */ }
+      }
+      if (c.signal.aborted) return;
       setPhase("done");
     } catch (e: any) {
       if (c.signal.aborted) return;
@@ -179,7 +191,16 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
       const only = present.length === 1 ? present[0] : null;
       const emptyLine = !hasSelection && only && only.type === "paragraph" && !(only.content || []).length;
       editor.transact(() => {
-        if (mode === "replace" || (mode === "insert" && emptyLine)) editor.replaceBlocks(blockIds, blocks);
+        if (mode === "replace" && present.length) {
+          // only the differences change: untouched blocks (and blocks without text) stay as they are
+          for (const h of mergeBlocks(present, blocks)) {
+            if (h.insert.length) {
+              if (h.after) editor.insertBlocks(h.insert, h.after, "after");
+              else editor.insertBlocks(h.insert, present[0].id, "before");
+            }
+            if (h.remove.length) editor.removeBlocks(h.remove.map((b: any) => b.id));
+          }
+        } else if (mode === "insert" && emptyLine) editor.replaceBlocks(blockIds, blocks);
         else editor.insertBlocks(blocks, lastId, "after");
       });
       onClose();
@@ -246,7 +267,11 @@ export function AIMenu({ editor, pageId, blockIds, hasSelection, onClose }: {
               </button>
             )}
             {phase === "done" && canReplace({ rewrite, partial, stale }) && (
-              <button type="button" className="cn-ai-btn primary" onClick={() => apply("replace")}><Check size={14} />{t("Replace")}</button>
+              plan?.wipe
+                ? <button type="button" className="cn-ai-btn danger" onClick={() => apply("replace")}>
+                    <Check size={14} />{t("Replace anyway (removes {n} of {m} blocks)").replace("{n}", String(plan.removed)).replace("{m}", String(plan.total))}
+                  </button>
+                : <button type="button" className="cn-ai-btn primary" onClick={() => apply("replace")}><Check size={14} />{t("Replace")}</button>
             )}
             {phase === "done" && !partial && !stale && !rewrite && (
               <button type="button" className="cn-ai-btn primary" onClick={() => apply("insert")}><Check size={14} />{t("Insert")}</button>

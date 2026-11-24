@@ -50,8 +50,19 @@ class Config:
     ai_key: str = ""                    # bearer for ai_url (never sent to the browser)
     ai_model: str = "hermes-agent"
     ai_name: str = "AI"                 # name shown in the UI
+    ai_models: str = ""                 # "Label=model;Other=model": models the chat can use (first = default)
     ai_system: str = ""                 # extra system prompt
     ai_timeout: int = 120
+
+    @property
+    def ai_model_list(self) -> list[tuple[str, str]]:
+        """[(label, upstream model)] offered by the chat; at least the default model."""
+        out = []
+        for part in self.ai_models.split(";"):
+            label, _, model = part.partition("=")
+            if label.strip() and model.strip():
+                out.append((label.strip(), model.strip()))
+        return out or [(self.ai_name, self.ai_model)]
 
     @property
     def ai_enabled(self) -> bool:
@@ -91,6 +102,6 @@ class Config:
             max_import_mb=int(e("CARNET_MAX_IMPORT_MB", "200") or 200),
             md_folders=e("CARNET_MD_FOLDERS", ""),
             ai_url=e("CARNET_AI_URL", "").strip().rstrip("/"), ai_key=e("CARNET_AI_KEY", "").strip(),
-            ai_model=e("CARNET_AI_MODEL", "") or "hermes-agent", ai_name=e("CARNET_AI_NAME", "") or "AI",
+            ai_model=e("CARNET_AI_MODEL", "") or "hermes-agent", ai_name=e("CARNET_AI_NAME", "") or "AI", ai_models=e("CARNET_AI_MODELS", ""),
             ai_system=read("AI_SYSTEM"), ai_timeout=int(e("CARNET_AI_TIMEOUT", "120") or 120),
         )

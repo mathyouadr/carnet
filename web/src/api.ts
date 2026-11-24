@@ -1,7 +1,7 @@
 // API client. Every path is relative to the app base (<base href> is injected by the server).
 export const BOOT: {
   base: string; protected: boolean; loggedIn: boolean; version: string; title: string; lang: string;
-  theme: string; maxUploadMb: number; ai?: { enabled: boolean; name: string };
+  theme: string; maxUploadMb: number; ai?: { enabled: boolean; name: string; models?: string[] };
 } = (window as any).CARNET || { base: "", protected: false, loggedIn: true, version: "dev", title: "Carnet", lang: "", theme: "", maxUploadMb: 50 };
 
 export const BASE = BOOT.base || "";

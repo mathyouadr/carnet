@@ -94,7 +94,7 @@ class App:
                 "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb, "ai": self.ai_info()}
 
     def ai_info(self):
-        return {"enabled": self.c.ai_enabled, "name": self.c.ai_name}
+        return {"enabled": self.c.ai_enabled, "name": self.c.ai_name, "models": [l for l, _ in self.c.ai_model_list]}
 
     # -- sessions: "expiry.signature"
     def make_session(self) -> str:
@@ -400,11 +400,13 @@ class Handler(BaseHTTPRequestHandler):
                 upload = path in ("/api/files", "/api/import") and self.headers.get("X-Carnet-Upload") == "1"
                 if not upload and ctype in ("application/x-www-form-urlencoded", "multipart/form-data", "text/plain"):
                     return self.json(415, {"error": "JSON required"})
-            if path in ("/api/ai", "/api/ai/blocks"):
+            if path in ("/api/ai", "/api/ai/blocks", "/api/ai/chat"):
                 if not self.app.c.ai_enabled:
                     return self.json(404, {"error": "not found"})
                 if method != "POST":
                     return self.json(405, {"error": "method not allowed"})
+                if path == "/api/ai/chat":
+                    return self.ai_chat()
                 return self.ai_stream() if path == "/api/ai" else self.ai_blocks()
             if path == "/api/files" and method == "POST":
                 return self.upload()
@@ -521,6 +523,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(413, {"error": e.code})
         except (ValueError, TypeError, KeyError, AttributeError):
             return self.json(400, {"error": "invalid_request"})
+        self._ai_sse(messages, None, {"selection_md": ai.clip_selection(selection_md)})
+
+    def _ai_sse(self, messages, model, first):
+        """Stream the model's answer to the browser as server-sent events (one request slot while it runs)."""
         if not ai.try_acquire(ai.max_concurrent()):
             return self.json(429, {"error": "too_many_requests"}, headers={"Retry-After": "5"})
 
@@ -537,9 +543,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(b"data: " + dumps(obj).encode() + b"\n\n")
                 self.wfile.flush()
 
-            stream = ai.relay(ai.stream_chat(self.app.c, messages, "carnet-" + secrets.token_hex(8)))
+            stream = ai.relay(ai.stream_chat(self.app.c, messages, "carnet-" + secrets.token_hex(8), model))
             try:
-                event({"selection_md": ai.clip_selection(selection_md)})
+                if first:
+                    event(first)
                 for delta in stream:
                     if delta:
                         event({"delta": delta})
@@ -555,6 +562,38 @@ class Handler(BaseHTTPRequestHandler):
             log.info("AI request cancelled by the client")
         finally:
             ai.release()
+
+    def ai_chat(self):
+        """Chat panel: questions and answers about the page, any configured model; never edits the page."""
+        body = self._ai_body()
+        if body is None:
+            return
+        pid = str(body.get("page_id") or "")
+        title = ""
+        if pid:
+            if self.app.folders.has(pid):
+                title = self.app.folders.page(pid)["title"] or ""
+            else:
+                try:
+                    title = self.app.store.page(pid, with_rows=False).get("title") or ""
+                except NotFound:
+                    return self.json(404, {"error": "not_found"})
+        label = str(body.get("model") or "")
+        models = dict(self.app.c.ai_model_list)
+        model = models.get(label) or self.app.c.ai_model_list[0][1]
+        titles = {r["id"]: r["title"] or "Untitled" for r in self.app.store.q("SELECT id, title FROM pages")}
+        try:
+            ctx = body.get("context") or []
+            if not isinstance(ctx, list):
+                raise ValueError("context must be a list of blocks")
+            history = body.get("history") or []
+            messages = ai.build_chat_messages(title=title, context_md=md.to_markdown(ctx, title_of=titles.get).strip(),
+                                              message=str(body.get("message") or ""),
+                                              history=history if isinstance(history, list) else [],
+                                              extra_system=self.app.c.ai_system)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            return self.json(400, {"error": "invalid_request"})
+        self._ai_sse(messages, model, None)
 
     def ai_blocks(self):
         body = self._ai_body()

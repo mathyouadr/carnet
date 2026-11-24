@@ -18,12 +18,19 @@ export class AIError extends Error {
   }
 }
 
+export type ChatRequest = { page_id: string; message: string; model: string; context: any[]; history: AIMessage[] };
+
+export async function aiChatStream(req: ChatRequest, onDelta: (text: string) => void, signal: AbortSignal): Promise<void> {
+  return aiStream(req as any, { onSelection: () => {}, onDelta }, signal, "/api/ai/chat");
+}
+
 export async function aiStream(
   req: AIRequest,
   h: { onSelection(md: string): void; onDelta(text: string): void },
   signal: AbortSignal,
+  path = "/api/ai",
 ): Promise<void> {
-  const res = await fetch(BASE + "/api/ai", {
+  const res = await fetch(BASE + path, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req),
     credentials: "same-origin", signal,
   });
