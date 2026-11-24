@@ -127,6 +127,16 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   const close = () => setPop(null);
   const openPop = (k: string, i?: number) => (e: React.MouseEvent) => setPop({ k, el: e.currentTarget as HTMLElement, i });
   const vp = { rows: shown, schema, view, readOnly: !!readOnly, onRow, onAdd, onSchema, onView, open };
+  // delete a view: switch to its neighbour tab at once, and tell the other open views (linked blocks, peek) once saved
+  const removeView = (id: string) => {
+    const i = tabs.findIndex((v) => v.id === id);
+    const rest = curViews().filter((v) => v.id !== id);
+    const next = rest.filter((v) => !v.embed_only);
+    const to = next[Math.min(Math.max(i, 0), next.length - 1)] || rest[0];
+    if (to) pick(to.id);
+    if (dbRef.current) commit({ ...dbRef.current, views: rest });
+    api.post(`/api/pages/${dbId}`, { views: rest }).then(() => announce(dbId)).catch((e) => { app.toast(String(e.message)); load(); });
+  };
   const addView = (type: View["type"]) => {
     const v: View = { id: newId(8), name: t(VIEW_TYPES.find((x) => x.type === type)!.label), type };
     persist({ views: [...curViews(), v] });
@@ -247,7 +257,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
           <MenuSep />
           <MenuItem icon={<Copy size={15} />} onClick={() => { const v = { ...view, id: newId(8), name: view.name + " 2" }; persist({ views: [...curViews(), v] }); pick(v.id); close(); }}>{t("Duplicate view")}</MenuItem>
           <MenuItem icon={<Download size={15} />} onClick={() => { location.href = `${BASE}/api/pages/${dbId}/export.csv`; close(); }}>{t("Export as CSV")}</MenuItem>
-          {views.length > 1 && !locked && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { persist({ views: curViews().filter((v) => v.id !== view.id) }); close(); }}>{t("Delete view")}</MenuItem>}
+          {views.length > 1 && !locked && <MenuItem danger icon={<Trash2 size={15} />} onClick={() => { removeView(view.id); close(); }}>{t("Delete view")}</MenuItem>}
         </Popover>
       )}
       {pop?.k === "filter" && (
