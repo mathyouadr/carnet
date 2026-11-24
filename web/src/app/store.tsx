@@ -154,6 +154,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.scrollTo(0, 0);
   }, []);
 
+  // phones: a card opens as a full page (back button, history, edit toggle), not in the side "peek" panel
+  const setPeek = useCallback((id: string | null) => {
+    if (id && matchMedia("(max-width: 760px)").matches) navigate(id);
+    else setPeekState(id);
+  }, [navigate]);
+
   const toast = useCallback((text: string, action?: Toast["action"]) => {
     const id = ++toastId.current;
     setToasts((ts) => [...ts.slice(-2), { id, text, action }]);
@@ -190,7 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     tree, byId, children: (id) => kids.get(id) || [], settings, refresh, patchTree, pageId: route.pageId, navigate,
-    peek, setPeek: setPeekState, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen,
+    peek, setPeek, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen,
     mobile, titleOf,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
