@@ -47,7 +47,8 @@ class HTTPError(Exception):
 
 
 def dumps(obj) -> str:
-    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    # allow_nan=False: a NaN/Infinity must never reach a client as invalid JSON (it raises instead)
+    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 class API:

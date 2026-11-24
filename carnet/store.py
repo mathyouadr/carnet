@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import re
 import secrets
 import sqlite3
@@ -699,9 +700,11 @@ class Store:
             return None
         if t == "number":
             try:
-                return float(v) if not isinstance(v, bool) else None
+                f = float(v) if not isinstance(v, bool) else None
             except (TypeError, ValueError):
                 return None
+            # NaN / Infinity are not JSON: a non-finite number is treated like any other invalid number
+            return f if f is not None and math.isfinite(f) else None
         if t == "checkbox":
             return bool(v) if not isinstance(v, str) else v.lower() in ("1", "true", "yes", "oui", "x", "✓")
         if t in ("select", "status"):
