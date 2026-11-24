@@ -16,6 +16,7 @@ import { LANG, t } from "../i18n";
 import { schema } from "./schema";
 import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
+import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
 import { useTheme } from "../app/theme";
 
@@ -79,8 +80,10 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   }, [editor]);  // eslint-disable-line
 
   // AI assistant: only when configured, on editable pages that are not Markdown files
-  const aiOn = !!BOOT.ai?.enabled && editable && !page.readonly;
+  const aiAvailable = !!BOOT.ai?.enabled && !page.readonly && !page.in_trash;
+  const aiOn = aiAvailable && editable;
   const [ai, setAI] = useState<{ blockIds: string[]; hasSelection: boolean } | null>(null);
+  useEffect(() => setAI(null), [page.id]);               // a menu belongs to the page it was opened on
   const openAI = useCallback(() => {
     const sel = editor.getSelection();
     const ids: string[] = (sel?.blocks || []).map((b: any) => b.id);
@@ -88,22 +91,52 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
     setAI({ blockIds: [editor.getTextCursorPosition().block.id], hasSelection: false });
   }, [editor]);
 
-  // Space on an empty line opens the menu (Notion)
+  // Mobile reading mode: the AI button switches to edit mode, and the menu opens once the page is editable
+  useEffect(() => {
+    if (!aiOn || sessionStorage.getItem("carnet:ai-open") !== page.id) return;
+    sessionStorage.removeItem("carnet:ai-open");
+    const timer = setTimeout(openAI, 60);
+    return () => clearTimeout(timer);
+  }, [aiOn, page.id, openAI]);
+
+  // Space on an empty line opens the menu (Notion). Android virtual keyboards send no space keydown: the
+  // space arrives as a text input instead (beforeinput, or input when the browser does not let us cancel it).
   useEffect(() => {
     const el = host.current;
     if (!el || !aiOn) return;
+    const inEditor = (e: Event) => !!(e.target as HTMLElement).closest?.(".bn-editor");
+    const emptyLine = () => {
+      if (editor.getSelection()) return null;
+      const b = editor.getTextCursorPosition().block;
+      return b.type === "paragraph" && !(b.content || []).length ? b : null;
+    };
     const down = (e: KeyboardEvent) => {
       if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return;
-      if (!(e.target as HTMLElement).closest?.(".bn-editor")) return;
-      if (editor.getSelection()) return;
-      const b = editor.getTextCursorPosition().block;
-      if (b.type !== "paragraph" || (b.content || []).length) return;
+      if (!inEditor(e) || !emptyLine()) return;
       e.preventDefault();
       e.stopPropagation();
       openAI();
     };
+    const before = (e: InputEvent) => {
+      if (!isSpaceInput(e.data, e.inputType) || !inEditor(e) || !emptyLine()) return;
+      e.preventDefault();
+      openAI();
+    };
+    const input = (e: InputEvent) => {
+      if (!isSpaceInput(e.data, e.inputType) || !inEditor(e) || editor.getSelection()) return;
+      const b = editor.getTextCursorPosition().block;
+      if (b.type !== "paragraph" || (b.content || []).length !== 1 || (b.content[0] as any).text !== " ") return;
+      editor.updateBlock(b, { content: [] } as any);
+      openAI();
+    };
     el.addEventListener("keydown", down, true);
-    return () => el.removeEventListener("keydown", down, true);
+    el.addEventListener("beforeinput", before as any, true);
+    el.addEventListener("input", input as any, true);
+    return () => {
+      el.removeEventListener("keydown", down, true);
+      el.removeEventListener("beforeinput", before as any, true);
+      el.removeEventListener("input", input as any, true);
+    };
   }, [editor, aiOn, openAI]);
 
   const slashItems = useMemo(() => async (query: string): Promise<DefaultReactSuggestionItem[]> => {
@@ -213,7 +246,17 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         <SuggestionMenuController triggerCharacter="/" getItems={slashItems} />
         <SuggestionMenuController triggerCharacter="@" getItems={mentionItems} />
       </BlockNoteView>
-      {ai && <AIMenu editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
+      {aiAvailable && !editable && app.mobile && (
+        <button type="button" className="cn-btn" aria-label={t("Ask AI")} title={t("Ask AI")}
+          style={{ position: "fixed", right: 16, bottom: 16, zIndex: 30, display: "flex", alignItems: "center", gap: 6, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}
+          onClick={() => {
+            sessionStorage.setItem("carnet:ai-open", page.id);
+            window.dispatchEvent(new CustomEvent("carnet:mode", { detail: "edit" }));   // App.tsx switches to edit mode
+          }}>
+          <Sparkles size={16} />{t("Ask AI")}
+        </button>
+      )}
+      {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>
   );
 }

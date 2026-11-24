@@ -7,6 +7,17 @@ export type AIRequest = {
   page_id: string; command: string; prompt?: string; selection: any[]; context: any[]; history?: AIMessage[];
 };
 
+/** A failure reported by the server as a code (English, never shown as is: the menu translates it). */
+export class AIError extends Error {
+  code: string;
+  status: number | undefined;
+  constructor(code: string, status?: number) {
+    super(code);
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export async function aiStream(
   req: AIRequest,
   h: { onSelection(md: string): void; onDelta(text: string): void },
@@ -18,7 +29,7 @@ export async function aiStream(
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || res.statusText || "AI request failed");
+    throw new AIError(typeof data.error === "string" ? data.error : "unreachable", res.status);
   }
   const reader = res.body.getReader();
   const dec = new TextDecoder();
@@ -29,11 +40,11 @@ export async function aiStream(
     for (const ev of parser.feed(dec.decode(value, { stream: true }))) {
       if (typeof ev.selection_md === "string") h.onSelection(ev.selection_md);
       else if (typeof ev.delta === "string") h.onDelta(ev.delta);
-      else if (ev.error) throw new Error(String(ev.error));
+      else if (ev.error) throw new AIError(String(ev.error), typeof ev.status === "number" ? ev.status : undefined);
       else if (ev.done) return;
     }
   }
-  throw new Error("AI answer interrupted");
+  throw new AIError("interrupted");
 }
 
 export async function aiBlocks(markdown: string): Promise<any[]> {

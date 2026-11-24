@@ -71,7 +71,7 @@ function inline(s: string): string {
     .replace(/~~([^~]+)~~/g, "<s>$1</s>")
     .replace(/==([^=]+)==/g, "<mark>$1</mark>")
     .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a, b) => `<u>${b || a}</u>`)
-    .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, "<u>$1</u>");
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<u>$1</u> ($2)");   // the target is shown: no hidden links
 }
 
 /** Light Markdown → HTML for the answer preview (escaped first; the real conversion happens server-side on insert). */
@@ -109,6 +109,28 @@ export function mdPreview(md: string): string {
   if (code) out.push(`<pre>${esc(code.join("\n"))}</pre>`);
   closeList();
   return out.join("");
+}
+
+/** The text as the user reads it (for the word diff): block markers and inline markers removed, links keep their target. */
+export function mdText(md: string): string {
+  const out: string[] = [];
+  let code = false;
+  for (const raw of md.replace(/\r/g, "").split("\n")) {
+    if (/^\s*```/.test(raw)) { code = !code; continue; }
+    const line = code ? raw : raw
+      .replace(/^\s*#{1,6}\s+/, "")
+      .replace(/^\s*>\s?(\[![a-z]+\]\s*)?/i, "")
+      .replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, "")
+      .replace(/^\s*\|/, "").replace(/\|/g, " ");
+    const plain = mdPlainKeepLinks(line).trim();
+    if (plain) out.push(plain);
+  }
+  return out.join("\n");
+}
+
+/** mdPlain, but `[label](url)` becomes `label (url)` as in the preview. */
+function mdPlainKeepLinks(s: string): string {
+  return mdPlain(s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)"));
 }
 
 /** Markdown without inline markers (for the word diff of rewrites). */
