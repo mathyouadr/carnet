@@ -1,11 +1,12 @@
 import { Component, type ReactNode } from "react";
 import { t } from "../i18n";
+import { reportError } from "./clientLog";
 
 /** Root guard: a render error shows a message and a reload button instead of a blank window. */
 export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(err: unknown) { console.error("Carnet render error:", err); }
+  componentDidCatch(err: unknown) { console.error("Carnet render error:", err); reportError("render", err); }
   render() {
     if (!this.state.failed) return this.props.children;
     return (

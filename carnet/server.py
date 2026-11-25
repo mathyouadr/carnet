@@ -415,6 +415,8 @@ class Handler(BaseHTTPRequestHandler):
                 if method != "POST":
                     return self.json(405, {"error": "method not allowed"})
                 return self.grammar_check()
+            if path == "/api/client-log" and method == "POST":
+                return self.client_log()
             if path == "/api/files" and method == "POST":
                 return self.upload()
             if path == "/api/import" and method == "POST":
@@ -612,6 +614,20 @@ class Handler(BaseHTTPRequestHandler):
         if len(text) > MAX_AI_MARKDOWN:
             return self.json(413, {"error": "too_large"})
         return self.json(200, {"blocks": md.to_blocks(text, resolve=self.app.store.resolve_title)})
+
+    def client_log(self):
+        """An error seen in the browser (uncaught error, failed render, stale bundle): written to the server log.
+
+        The browser keeps no trace once the tab is closed, so this is the only way to know why a button stopped working."""
+        try:
+            body = self.read_body()
+        except (ValueError, UnicodeDecodeError):
+            return self.json(400, {"error": "bad json"})
+        def clip(v, n):
+            return " ".join(str(v or "").split())[:n]
+        log.warning("client error [%s] %s | %s | at %s", clip(body.get("kind"), 20), clip(body.get("message"), 300),
+                    clip(body.get("stack"), 1200), clip(body.get("url"), 200))
+        return self.json(200, {"ok": True})
 
     def grammar_check(self):
         """Spelling and grammar of a text (LanguageTool): {text, language?} -> {matches: [...]}."""

@@ -17,6 +17,7 @@ import { schema } from "./schema";
 import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { ChatPanel } from "./ai/ChatPanel";
+import { reportError } from "../app/clientLog";
 import { Outline } from "./Outline";
 import { GrammarMenu, GrammarPanel, segText, useGrammar } from "./Grammar";
 import type { GIssue } from "./Grammar";
@@ -49,6 +50,7 @@ class EditorBoundary extends Component<EditorProps, { level: number; key: string
   }
   componentDidCatch(err: unknown) {
     console.error("Carnet: page content could not be loaded", err);
+    reportError("editor", err);
     this.setState(s => ({ level: s.level + 1 }));
   }
   render() {

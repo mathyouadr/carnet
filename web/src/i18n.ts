@@ -127,6 +127,7 @@ const FR: Record<string, string> = {
   "Something went wrong": "Une erreur s'est produite",
   "The page could not be shown. Reloading usually fixes it.": "La page n'a pas pu s'afficher. Recharger règle souvent le problème.",
   "Reload": "Recharger",
+  "Carnet was updated: reload the page": "Carnet a été mis à jour : recharge la page",
   "Could not load this page. Check the connection.": "Impossible de charger cette page. Vérifiez la connexion.",
   "Your changes could not be saved: {msg}": "Vos modifications n'ont pas pu être enregistrées : {msg}",
   "This page changed elsewhere. Your last edits are kept as a copy.": "Cette page a été modifiée ailleurs. Vos dernières modifications sont gardées en copie.",
