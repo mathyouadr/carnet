@@ -14,6 +14,7 @@ import { relTime, t } from "../i18n";
 import { MenuItem, MenuLabel, MenuSep, Popover } from "../ui/Popover";
 import { seedWelcome } from "./welcome";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { TabBar } from "./Tabs";
 
 function useSaveState() {
   const [s, setS] = useState<"saving" | "saved" | "error" | "">("");
@@ -99,7 +100,7 @@ function Topbar({ mode, setMode, page, onRestored }: { mode: "edit" | "read"; se
         {crumbs.map((c, i) => (
           <span key={c.id} className="cn-crumb">
             {i > 0 && <span className="sep">/</span>}
-            <a onClick={() => app.navigate(c.id)}>{c.icon && <span className="ic">{c.icon}</span>}{(app.byId.get(c.id)?.title ?? c.title) || t("Untitled")}</a>
+            <a {...app.linkProps(c.id)}>{c.icon && <span className="ic">{c.icon}</span>}{(app.byId.get(c.id)?.title ?? c.title) || t("Untitled")}</a>
           </span>
         ))}
       </nav>
@@ -269,6 +270,7 @@ function Main() {
       {app.mobile && app.sidebar && <div className="cn-side-backdrop" onClick={() => app.setSidebar(false)} />}
       <Sidebar onTrash={(e) => setTrash(e.currentTarget as HTMLElement)} onTemplates={(e) => setTpl(e.currentTarget as HTMLElement)} onSettings={() => setSettings(true)} />
       <main className="cn-main">
+        {!app.mobile && <TabBar />}
         <Topbar mode={mode} setMode={setMode} page={page} onRestored={() => { setReload((x) => x + 1); window.dispatchEvent(new CustomEvent("carnet:changed", { detail: { id: pid } })); }} />
         <div id="cn-tb-main" className="cn-tb-slot" />
         <div className="cn-scroll">

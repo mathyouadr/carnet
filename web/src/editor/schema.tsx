@@ -136,10 +136,12 @@ export const PageLinkBlock = createReactBlockSpec(
   { type: "pageLink", propSchema: { pageId: { default: "" } }, content: "none" },
   {
     render: ({ block }) => {
-      const { byId, navigate } = useApp();
+      const { byId, open } = useApp();
       const p = byId.get(block.props.pageId as string);
       return (
-        <div className="cn-pagelink" contentEditable={false} onClick={() => p && navigate(p.id)} role="link">
+        <div className="cn-pagelink" contentEditable={false} onClick={(e) => p && open(p.id, e)}
+          onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
+          onAuxClick={(e) => { if (p && e.button === 1) { e.preventDefault(); open(p.id, e); } }} role="link">
           <span className="ic">{p?.icon || (p?.kind === "database" ? <Table2 size={18} /> : <FileText size={18} />)}</span>
           <span className={`tx ${p ? "" : "gone"}`}>{p ? p.title || t("Untitled") : t("Page not found")}</span>
           <ArrowUpRight size={14} className="arrow" />
@@ -244,11 +246,13 @@ export const PageMention = createReactInlineContentSpec(
   { type: "pageMention", propSchema: { pageId: { default: "" }, title: { default: "" } }, content: "none" },
   {
     render: ({ inlineContent }) => {
-      const { byId, navigate } = useApp();
+      const { byId, open } = useApp();
       const p = byId.get(inlineContent.props.pageId as string);
       return (
         <a className={`cn-mention ${p ? "" : "gone"}`} href={p ? `p/${p.id}` : undefined}
-          onClick={(e) => { e.preventDefault(); if (p) navigate(p.id); }}>
+          onClick={(e) => { e.preventDefault(); if (p) open(p.id, e); }}
+          onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
+          onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); if (p) open(p.id, e); } }}>
           <span className="ic">{p?.icon || <FileText size={13} />}</span>
           <span className="tx">{p ? p.title || t("Untitled") : inlineContent.props.title || t("Page not found")}</span>
         </a>

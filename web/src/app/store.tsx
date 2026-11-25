@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { api, BASE, BOOT, Summary } from "../api";
 import { t } from "../i18n";
+import * as T from "./tabsModel";
+import type { TabsState } from "./tabsModel";
 
 // ------------------------------------------------------------------ routing (history API)
 export function pagePath(id: string) {
@@ -40,6 +42,18 @@ type Ctx = {
   setSearchOpen: (v: boolean) => void;
   mobile: boolean;
   titleOf: (id: string) => string;
+  // page tabs (desktop): see tabsModel.ts
+  tabs: TabsState;
+  openTab: (id: string | null, opts?: { background?: boolean }) => void;
+  switchTab: (k: string) => void;
+  closeTab: (k: string) => void;
+  closeOtherTabs: (k: string) => void;
+  closeRightTabs: (k: string) => void;
+  moveTab: (k: string, to: number) => void;
+  /** a link click: Ctrl/Cmd + click or middle click opens a new tab (desktop), else the page opens here */
+  open: (id: string, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; button?: number; preventDefault?: () => void }) => void;
+  /** props for an element that opens a page: click, Ctrl+click and middle click */
+  linkProps: (id: string) => { onClick: (e: React.MouseEvent) => void; onAuxClick: (e: React.MouseEvent) => void; onMouseDown: (e: React.MouseEvent) => void };
 };
 
 const AppCtx = createContext<Ctx>(null as any);
@@ -94,7 +108,23 @@ function useKeyboardFlag(mobile: boolean) {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [tree, setTree] = useState<Summary[]>([]);
   const [settings, setSettings] = useState<Record<string, any>>({});
-  const [route, setRoute] = useState(parseRoute);
+  const [tabs, setTabs] = useState<TabsState>(() => {
+    let saved: unknown = null;
+    try { saved = JSON.parse(localStorage.getItem("carnet:tabs") || "null"); } catch { /* ignore */ }
+    return T.initTabs(saved, parseRoute().pageId);
+  });
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  // home URL: reopen the page of the active tab
+  const [route, setRoute] = useState(() => {
+    const r = parseRoute();
+    const id = T.activeTab(tabs).id;
+    if (!r.pageId && id && location.pathname.slice(BASE.length).replace(/\/$/, "") === "") {
+      history.replaceState({ i: (history.state?.i as number) || 0 }, "", pagePath(id));
+      return { pageId: id };
+    }
+    return r;
+  });
   const [peek, setPeekState] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const mobile = useMobile();
@@ -145,6 +175,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const byId = useMemo(() => new Map(tree.map((p) => [p.id, p])), [tree]);
+
+  // tabs: the active tab follows the route; saved for the next visit; tabs of deleted pages close
+  useEffect(() => { setTabs((s) => T.showInActive(s, route.pageId)); }, [route.pageId]);
+  useEffect(() => { try { localStorage.setItem("carnet:tabs", JSON.stringify(tabs)); } catch { /* full */ } }, [tabs]);
+  useEffect(() => {
+    if (!tree.length) return;
+    setTabs((s) => { const cur = T.activeTab(s).id; return T.dropMissing(s, (id) => byId.has(id) || id === cur); });
+  }, [tree, byId]);
   const kids = useMemo(() => {
     const m = new Map<string | null, Summary[]>();
     for (const p of tree) {
@@ -174,6 +212,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (id && matchMedia("(max-width: 760px)").matches) navigate(id);
     else setPeekState(id);
   }, [navigate]);
+
+  // ---- tabs
+  const scroller = () => document.querySelector<HTMLElement>(".cn-main > .cn-scroll");
+  /** show tab `next` (already in the state): URL replaced (not pushed), scroll restored once the page is drawn */
+  const show = useCallback((next: TabsState) => {
+    const before = tabsRef.current;
+    const el = scroller();
+    if (el && before.active !== next.active) next = T.setScroll(next, before.active, el.scrollTop);
+    tabsRef.current = next;
+    setTabs(next);
+    if (before.active === next.active) return;
+    const tab = T.activeTab(next);
+    const url = tab.id ? pagePath(tab.id) : `${BASE}/`;
+    history.replaceState({ i: (history.state?.i as number) || 0 }, "", url);
+    setRoute({ pageId: tab.id });
+    setPeekState(null);
+    if (tab.id) localStorage.setItem("carnet:last", tab.id);
+    const y = tab.scroll || 0;
+    [60, 250, 600, 1200].forEach((ms) => setTimeout(() => {
+      const s = scroller();
+      if (s && tabsRef.current.active === tab.k && Math.abs(s.scrollTop - y) > 2 && s.scrollHeight - s.clientHeight >= y - 2) s.scrollTop = y;
+    }, ms));
+  }, []);
+
+  const openTab = useCallback((id: string | null, opts?: { background?: boolean }) => {
+    if (matchMedia("(max-width: 760px)").matches) { if (id) navigate(id); return; }
+    show(T.openTab(tabsRef.current, id, opts));
+  }, [navigate, show]);
+  const switchTab = useCallback((k: string) => show(T.activate(tabsRef.current, k)), [show]);
+  const closeTab = useCallback((k: string) => show(T.closeTab(tabsRef.current, k)), [show]);
+  const closeOtherTabs = useCallback((k: string) => show(T.closeOthers(tabsRef.current, k)), [show]);
+  const closeRightTabs = useCallback((k: string) => show(T.closeRight(tabsRef.current, k)), [show]);
+  const moveTab = useCallback((k: string, to: number) => show(T.moveTab(tabsRef.current, k, to)), [show]);
+
+  const open = useCallback((id: string, e?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; button?: number; preventDefault?: () => void }) => {
+    const wantsTab = !!e && (e.button === 1 || !!e.ctrlKey || !!e.metaKey);
+    if (wantsTab && !matchMedia("(max-width: 760px)").matches) {
+      e!.preventDefault?.();
+      openTab(id, { background: !e!.shiftKey });     // like a browser: Ctrl+click = background, Ctrl+Shift+click = go there
+    } else navigate(id);
+  }, [navigate, openTab]);
+  const linkProps = useCallback((id: string) => ({
+    onClick: (e: React.MouseEvent) => open(id, e),
+    onAuxClick: (e: React.MouseEvent) => { if (e.button === 1) { e.preventDefault(); e.stopPropagation(); open(id, e); } },
+    onMouseDown: (e: React.MouseEvent) => { if (e.button === 1) e.preventDefault(); },   // no autoscroll cursor
+  }), [open]);
 
   const toast = useCallback((text: string, action?: Toast["action"]) => {
     const id = ++toastId.current;
@@ -213,6 +297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     tree, byId, children: (id) => kids.get(id) || [], settings, refresh, patchTree, pageId: route.pageId, navigate,
     peek, setPeek, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen, graphOpen, setGraphOpen,
     mobile, titleOf,
+    tabs, openTab, switchTab, closeTab, closeOtherTabs, closeRightTabs, moveTab, open, linkProps,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

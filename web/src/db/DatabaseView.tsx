@@ -184,7 +184,7 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
               onBlur={(e) => { if (e.target.value !== db.title) persist({ title: e.target.value }); }}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
           )}
-          <button type="button" className="cn-icon-btn" title={t("Open in full page")} onClick={() => app.navigate(dbId)}><FileText size={14} /></button>
+          <button type="button" className="cn-icon-btn" title={t("Open in full page")} {...app.linkProps(dbId)}><FileText size={14} /></button>
         </div>
       )}
       <div className="cn-db-bar">

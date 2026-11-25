@@ -237,7 +237,7 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
         {loose.length > 0 && (
           <div className="cn-subpages">
             {loose.map((c) => (
-              <div key={c.id} className="cn-pagelink" onClick={() => app.navigate(c.id)}>
+              <div key={c.id} className="cn-pagelink" {...app.linkProps(c.id)}>
                 <span className="ic">{c.icon || <FileText size={18} />}</span><span className="tx">{c.title || t("Untitled")}</span>
               </div>
             ))}
@@ -247,7 +247,7 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
           <details className="cn-backlinks" open>
             <summary><Link2 size={14} /> {t("Backlinks")} ({page.backlinks.length})</summary>
             {page.backlinks.map((b) => (
-              <a key={b.id} className="cn-backlink" href={pagePath(b.id)} onClick={(e) => { e.preventDefault(); app.navigate(b.id); }}>
+              <a key={b.id} className="cn-backlink" href={pagePath(b.id)} {...app.linkProps(b.id)}>
                 <span className="ic">{b.icon || <FileText size={16} />}</span>
                 <span className="bd">
                   <span className="ti">{b.title || t("Untitled")}</span>
@@ -307,7 +307,7 @@ function RowProperties({ page, editable, onPage }: { page: Page; editable: boole
   const dummyView = { id: "", name: "", type: "table" as const };
   return (
     <div className="cn-rowprops">
-      <a className="cn-rowprops-db" onClick={() => app.navigate(dbId)}>{page.database!.icon || "🗂️"} {page.database!.title || t("Untitled")}</a>
+      <a className="cn-rowprops-db" {...app.linkProps(dbId)}>{page.database!.icon || "🗂️"} {page.database!.title || t("Untitled")}</a>
       {schema.properties.map((p) => (
         <div key={p.id} className="cn-rowprop">
           <button type="button" className="cn-rowprop-name" onClick={(e) => editable && setMenu({ el: e.currentTarget, prop: p })}>

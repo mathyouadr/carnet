@@ -101,7 +101,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           }}
           onDrop={onDrop}
           {...ctx(p)}
-          onClick={() => app.navigate(p.id)}>
+          {...app.linkProps(p.id)}>
           {kids.length ? (
             <button type="button" className={`cn-node-tog ${open ? "open" : ""}`} onClick={(e) => { e.stopPropagation(); exp.toggle(p.id); }}>
               <ChevronRight size={14} />
@@ -137,7 +137,7 @@ export function Sidebar({ onTrash, onSettings, onTemplates }: { onTrash: (e: Rea
           <div className="cn-side-sec">
             <div className="cn-side-label">{t("Favorites")}</div>
             {favs.map((p) => (
-              <div key={"f" + p.id} className={`cn-node ${app.pageId === p.id ? "active" : ""}`} style={{ paddingLeft: 6 }} {...ctx(p)} onClick={() => app.navigate(p.id)}>
+              <div key={"f" + p.id} className={`cn-node ${app.pageId === p.id ? "active" : ""}`} style={{ paddingLeft: 6 }} {...ctx(p)} {...app.linkProps(p.id)}>
                 <span className="cn-node-tog ph" />
                 <span className="cn-node-ic">{p.icon || <FileText size={15} />}</span>
                 <span className="cn-node-tx">{p.title || t("Untitled")}</span>

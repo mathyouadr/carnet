@@ -877,3 +877,23 @@ html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inse
 
 /* a card dragged over another database: it will move there */
 .cn-db.drop-db { outline: 2px dashed var(--cn-accent); outline-offset: 4px; border-radius: 8px; background: var(--cn-accent-soft); }
+
+/* ---------------------------------------------------------------- page tabs (desktop, app/Tabs.tsx) */
+.cn-ptabs { display: flex; align-items: flex-end; gap: 1px; height: 40px; padding: 6px 8px 0; flex-shrink: 0; background: var(--cn-bg-2); border-bottom: 1px solid var(--cn-line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; user-select: none; -webkit-user-select: none; }
+.cn-ptabs::-webkit-scrollbar { display: none; }
+.cn-ptab { position: relative; display: flex; align-items: center; gap: 7px; height: 33px; flex: 0 1 220px; min-width: 96px; max-width: 220px; padding: 0 5px 0 11px; border-radius: 8px 8px 0 0; font-size: 13px; color: var(--cn-fg-2); cursor: default; }
+.cn-ptab:hover:not(.on) { background: var(--cn-hover); color: var(--cn-fg); }
+.cn-ptab.on { background: var(--cn-bg); color: var(--cn-fg); font-weight: 600; box-shadow: 0 1px 0 var(--cn-bg); z-index: 1; }
+.cn-ptab:not(.on) + .cn-ptab:not(.on):not(:hover)::before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 1px; background: var(--cn-line-2); }
+.cn-ptab.drag { opacity: .45; }
+.cn-ptab.mark-l::after, .cn-ptab.mark-r::after { content: ""; position: absolute; top: 5px; bottom: 5px; width: 2px; border-radius: 1px; background: var(--cn-accent); z-index: 2; }
+.cn-ptab.mark-l::after { left: -2px; }
+.cn-ptab.mark-r::after { right: -2px; }
+.cn-ptab .ic { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 18px; font-size: 15px; line-height: 1; font-weight: 400; }
+.cn-ptab .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cn-ptab .x { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--cn-fg-2); opacity: 0; }
+.cn-ptab:hover .x, .cn-ptab.on .x { opacity: 1; }
+.cn-ptab .x:hover { background: var(--cn-active); color: var(--cn-fg); }
+.cn-ptab-add { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 0 3px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--cn-fg-2); }
+.cn-ptab-add:hover { background: var(--cn-hover); color: var(--cn-fg); }
+@media print { .cn-ptabs { display: none !important; } }

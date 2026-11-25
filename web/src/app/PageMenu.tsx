@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Star, StarOff, Copy, CornerUpRight, Link2, ExternalLink, Trash2 } from "lucide-react";
+import { Star, StarOff, Copy, CornerUpRight, Link2, ExternalLink, Trash2, PanelTop } from "lucide-react";
 import { api, Summary } from "../api";
 import { pagePath, useApp } from "./store";
 import { t } from "../i18n";
@@ -17,6 +17,7 @@ export function PageMenu({ page, anchor, onClose }: { page: Summary; anchor: Men
   return (
     <Popover anchor={anchor} onClose={onClose} width={240}>
       {app.pageId !== page.id && <MenuItem icon={<ExternalLink size={15} />} onClick={() => { app.navigate(page.id); onClose(); }}>{t("Open")}</MenuItem>}
+      {!app.mobile && <MenuItem icon={<PanelTop size={15} />} onClick={() => { app.openTab(page.id); onClose(); }}>{t("Open in new tab")}</MenuItem>}
       {page.readonly ? (
         <MenuItem icon={<Link2 size={15} />} onClick={() => { link(); onClose(); }}>{t("Copy link")}</MenuItem>
       ) : <>

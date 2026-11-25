@@ -143,7 +143,9 @@ function Card({ row, schema, view, open, cover, draggable, onDragStart }: {
     <>
     {menu && page && <PageMenu page={page} anchor={menu} onClose={() => setMenu(null)} />}
     <div className={`cn-card ${picked ? "sel" : ""}`} data-row={row.id}
-      onClick={(e) => { if (sel && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sel.toggle(row.id); } else open(); }} draggable={draggable} onDragStart={onDragStart} {...(page ? ctx : {})}>
+      onClick={(e) => { if (sel && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sel.toggle(row.id); } else open(); }} draggable={draggable}
+      onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
+      onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); app.openTab(row.id, { background: !e.shiftKey }); } }} onDragStart={onDragStart} {...(page ? ctx : {})}>
       {cover && mode === "cover" && row.cover && <div className="cn-card-cover" style={coverStyle(row.cover)} />}
       {cover && mode === "content" && <div className="cn-card-preview">{row.preview}</div>}
       <div className="cn-card-body">
