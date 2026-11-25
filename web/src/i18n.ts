@@ -88,7 +88,7 @@ const FR: Record<string, string> = {
   "Wrap cells": "Retour à la ligne", "Show page icon": "Afficher l'icône", "Link to database": "Base liée",
   "Choose a database": "Choisir une base", "This database is empty.": "Cette base est vide.",
   "Search in this database…": "Rechercher dans cette base…", "Include time": "Inclure l'heure", "End date": "Date de fin",
-  "Clear": "Effacer", "Open in full page": "Ouvrir en pleine page", "Open in new tab": "Ouvrir dans un nouvel onglet", "New tab": "Nouvel onglet", "Close tab": "Fermer l'onglet", "Duplicate tab": "Dupliquer l'onglet", "Close other tabs": "Fermer les autres onglets", "Close tabs to the right": "Fermer les onglets à droite", "Delete row": "Supprimer la ligne",
+  "Clear": "Effacer", "Open in full page": "Ouvrir en pleine page", "Open in new tab": "Ouvrir dans un nouvel onglet", "New tab": "Nouvel onglet", "Close tab": "Fermer l'onglet", "Duplicate tab": "Dupliquer l'onglet", "Close other tabs": "Fermer les autres onglets", "Close tabs to the right": "Fermer les onglets à droite", "{n} tabs at most: close one first": "{n} onglets au maximum : fermes-en un d'abord", "Delete row": "Supprimer la ligne",
   "Search or create an option…": "Rechercher ou créer une option…", "Create": "Créer", "Search pages…?": "Rechercher une page…",
   "Format": "Format", "Percent": "Pourcentage", "Euro": "Euro", "Dollar": "Dollar", "Edit property": "Modifier la propriété",
   "To do": "À faire", "In progress": "En cours", "Done": "Terminé", "Description": "Description", "Add a description…": "Ajouter une description…",

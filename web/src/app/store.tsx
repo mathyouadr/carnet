@@ -213,6 +213,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else setPeekState(id);
   }, [navigate]);
 
+  const toast = useCallback((text: string, action?: Toast["action"]) => {
+    const id = ++toastId.current;
+    setToasts((ts) => [...ts.filter((x) => x.text !== text || x.action).slice(-2), { id, text, action }]);
+    setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), action ? 6000 : 3000);
+  }, []);
+
   // ---- tabs
   const scroller = () => document.querySelector<HTMLElement>(".cn-main > .cn-scroll");
   /** show tab `next` (already in the state): URL replaced (not pushed), scroll restored once the page is drawn */
@@ -238,8 +244,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const openTab = useCallback((id: string | null, opts?: { background?: boolean }) => {
     if (matchMedia("(max-width: 760px)").matches) { if (id) navigate(id); return; }
+    if (tabsRef.current.list.length >= T.MAX_TABS) { toast(t("{n} tabs at most: close one first").replace("{n}", String(T.MAX_TABS))); return; }
     show(T.openTab(tabsRef.current, id, opts));
-  }, [navigate, show]);
+  }, [navigate, show, toast]);
   const switchTab = useCallback((k: string) => show(T.activate(tabsRef.current, k)), [show]);
   const closeTab = useCallback((k: string) => show(T.closeTab(tabsRef.current, k)), [show]);
   const closeOtherTabs = useCallback((k: string) => show(T.closeOthers(tabsRef.current, k)), [show]);
@@ -259,11 +266,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     onMouseDown: (e: React.MouseEvent) => { if (e.button === 1) e.preventDefault(); },   // no autoscroll cursor
   }), [open]);
 
-  const toast = useCallback((text: string, action?: Toast["action"]) => {
-    const id = ++toastId.current;
-    setToasts((ts) => [...ts.slice(-2), { id, text, action }]);
-    setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), action ? 6000 : 3000);
-  }, []);
 
   const patchTree = useCallback((id: string, patch: Partial<Summary>) => {
     setTree((ts) => ts.map((p) => (p.id === id ? { ...p, ...patch } : p)));

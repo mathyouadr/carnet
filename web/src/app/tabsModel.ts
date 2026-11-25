@@ -1,7 +1,7 @@
 // Page tabs (like Notion desktop or a file explorer): a list of tabs, each showing one page, one active.
 // Pure functions, tested by tests/tabs.test.ts; the React side lives in store.tsx / Tabs.tsx.
 
-export type Tab = { k: string; id: string | null; scroll?: number };
+export type Tab = { k: string; id: string | null; scroll?: number; from?: string };   // from = tab it was opened from
 export type TabsState = { list: Tab[]; active: string };
 
 export const MAX_TABS = 20;
@@ -16,9 +16,10 @@ export function initTabs(saved: unknown, routeId: string | null, key = newKey): 
   const s = saved as TabsState | null;
   if (s && Array.isArray(s.list)) {
     list = s.list
-      .filter((x) => x && typeof x.k === "string" && (typeof x.id === "string" || x.id === null))
+      .filter((x, i, a) => x && typeof x.k === "string" && (typeof x.id === "string" || x.id === null)
+        && a.findIndex((y) => y && y.k === x.k) === i)     // a damaged save: no duplicate keys
       .slice(0, MAX_TABS)
-      .map((x) => ({ k: x.k, id: x.id, scroll: typeof x.scroll === "number" ? x.scroll : undefined }));
+      .map((x) => ({ k: x.k, id: x.id, scroll: typeof x.scroll === "number" ? x.scroll : undefined, from: typeof x.from === "string" ? x.from : undefined }));
     active = typeof s.active === "string" ? s.active : "";
   }
   if (!list.length) list = [{ k: key(), id: routeId }];
@@ -43,13 +44,15 @@ export function showInActive(s: TabsState, id: string | null): TabsState {
   return { ...s, list: s.list.map((x) => (x.k === cur.k ? { ...x, id, scroll: undefined } : x)) };
 }
 
-/** Open `id` in a new tab right after the active one. */
+/** Open `id` in a new tab right after the active one (unchanged state when MAX_TABS are open). */
 export function openTab(s: TabsState, id: string | null, opts: { background?: boolean; key?: string } = {}): TabsState {
-  if (s.list.length >= MAX_TABS) return showInActive(s, id);
+  if (s.list.length >= MAX_TABS) return s;
   const k = opts.key || newKey();
-  const i = s.list.findIndex((x) => x.k === s.active);
+  // like a browser: several tabs opened from the same tab keep their order (after the ones already opened from it)
+  let i = s.list.findIndex((x) => x.k === s.active);
+  while (i + 1 < s.list.length && s.list[i + 1].from === s.active) i++;
   const list = [...s.list];
-  list.splice(i + 1, 0, { k, id });
+  list.splice(i + 1, 0, { k, id, from: s.active });
   return { list, active: opts.background ? s.active : k };
 }
 

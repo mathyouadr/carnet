@@ -19,6 +19,7 @@ test("restore: the URL page activates its tab, or replaces the active one", () =
   assert.deepEqual(ids(s), ["c", "b"]);
   assert.equal(s.active, "1");
   assert.deepEqual(ids(initTabs({ list: "junk" }, null, key)), [null]);
+  assert.deepEqual(ids(initTabs({ list: [{ k: "z", id: "a" }, { k: "z", id: "b" }, { k: 3 }], active: "z" }, null, key)), ["a"]);
 });
 
 test("open after the active tab, background or not", () => {
@@ -26,16 +27,17 @@ test("open after the active tab, background or not", () => {
   s = openTab(s, "c", { key: "3", background: true });
   assert.deepEqual(ids(s), ["a", "c", "b"]);
   assert.equal(s.active, "1");
+  s = openTab(s, "e", { key: "5", background: true });
+  assert.deepEqual(ids(s), ["a", "c", "e", "b"]);        // in the order they were opened
   s = openTab(s, "d", { key: "4" });
-  assert.deepEqual(ids(s), ["a", "d", "c", "b"]);
+  assert.deepEqual(ids(s), ["a", "c", "e", "d", "b"]);
   assert.equal(s.active, "4");
 });
 
-test("tab limit: the page opens in the active tab", () => {
+test("tab limit: nothing changes", () => {
   const list = Array.from({ length: MAX_TABS }, (_, i) => ({ k: String(i), id: "p" + i }));
-  const s = openTab({ list, active: "0" }, "new");
-  assert.equal(s.list.length, MAX_TABS);
-  assert.equal(s.list[0].id, "new");
+  const s0 = { list, active: "0" };
+  assert.equal(openTab(s0, "new"), s0);
 });
 
 test("close: right neighbour, else left; the last tab stays", () => {
