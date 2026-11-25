@@ -37,7 +37,7 @@ function netOrCache(e, cache, key, store) {
     let done = false;
     const fallback = async () => {
       if (done) return false;
-      const hit = await (await caches.open(cache)).match(key);
+      const hit = await (await caches.open(cache)).match(key) || await caches.match(key);   // any cache of this site
       if (done || !hit) return false;
       done = true; resolve(hit); return true;
     };
@@ -61,7 +61,12 @@ async function offlineSearch(url) {
 
 self.addEventListener("fetch", e => {
   const r = e.request, url = new URL(r.url);
-  if (r.method !== "GET" || url.origin !== location.origin || !url.pathname.startsWith(BASE + "/")) return;
+  if (r.method !== "GET" || url.origin !== location.origin) return;
+  if (!url.pathname.startsWith(BASE + "/")) {
+    // files the host page injects (CARNET_EXTRA_HEAD/BODY: its menu script, styles, fonts): network, else a copy
+    if (["script", "style", "font", "image"].includes(r.destination)) e.respondWith(netOrCache(e, DATA, url.pathname + url.search, true));
+    return;
+  }
   const rel = url.pathname.slice(BASE.length);
   if (rel.startsWith("/assets/")) {
     e.respondWith(caches.match(r).then(hit => hit || fetch(r).then(async res => {
