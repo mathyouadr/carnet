@@ -122,8 +122,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   // a Carnet update removed the code this tab still uses (clientLog.ts): say so, with a reload button
   useEffect(() => {
-    const on = () => setToasts((ts) => [...ts.slice(-2), { id: ++toastId.current, text: t("Carnet was updated: reload the page"),
-      action: { label: t("Reload"), run: () => location.reload() } }]);
+    let shown = false;                                  // one notice, even when several chunks fail
+    const on = () => {
+      if (shown) return;
+      shown = true;
+      setToasts((ts) => [...ts.slice(-2), { id: ++toastId.current, text: t("Carnet was updated: reload the page"),
+        action: { label: t("Reload"), run: () => location.reload() } }]);
+    };
     addEventListener("carnet:stale", on);
     return () => removeEventListener("carnet:stale", on);
   }, []);
