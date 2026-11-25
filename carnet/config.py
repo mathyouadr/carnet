@@ -55,6 +55,7 @@ class Config:
     ai_timeout: int = 120
     grammar_url: str = ""               # LanguageTool server ("http://127.0.0.1:8081"); empty = no grammar check
     grammar_lang: str = "auto"          # language sent to LanguageTool ("fr", "en-US", "auto"...)
+    offline: bool = False               # service worker: read every page offline (HTTPS or localhost only)
 
     @property
     def ai_model_list(self) -> list[tuple[str, str]]:
@@ -107,4 +108,5 @@ class Config:
             ai_model=e("CARNET_AI_MODEL", "") or "hermes-agent", ai_name=e("CARNET_AI_NAME", "") or "AI", ai_models=e("CARNET_AI_MODELS", ""),
             ai_system=read("AI_SYSTEM"), ai_timeout=int(e("CARNET_AI_TIMEOUT", "120") or 120),
             grammar_url=e("CARNET_GRAMMAR_URL", "").strip().rstrip("/"), grammar_lang=e("CARNET_GRAMMAR_LANG", "").strip() or "auto",
+            offline=_bool(e("CARNET_OFFLINE")),
         )

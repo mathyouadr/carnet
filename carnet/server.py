@@ -22,7 +22,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, ai, grammar, transfer
+from . import __version__, ai, grammar, offline, transfer
 from . import markdown as md
 from .api import API, dumps
 from .config import Config
@@ -92,7 +92,7 @@ class App:
     def info(self):
         return {"version": __version__, "title": self.c.title, "base": self.c.base_path, "protected": self.protected,
                 "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb, "ai": self.ai_info(),
-                "grammar": bool(self.c.grammar_url)}
+                "grammar": bool(self.c.grammar_url), "offline": self.c.offline}
 
     def ai_info(self):
         return {"enabled": self.c.ai_enabled, "name": self.c.ai_name, "models": [l for l, _ in self.c.ai_model_list]}
@@ -377,6 +377,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(421, {"error": "unknown host name: add it to CARNET_ALLOWED_HOSTS (or set CARNET_PASSWORD)"})
         if path.startswith("/assets/") or path in ("/favicon.svg", "/icon.svg", "/manifest.webmanifest"):
             return self.static(path)
+        if path in ("/sw.js", "/sw-lib.js") and method == "GET":
+            return self.service_worker(path)
         if path == "/api/login" and method == "POST":
             return self.login()
         if path == "/api/logout" and method == "POST":
@@ -745,7 +747,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = idx.read_text(encoding="utf-8")
         boot = {"base": c.base_path, "protected": self.app.protected, "loggedIn": logged_in, "version": __version__,
                 "title": c.title, "lang": c.lang, "theme": c.theme, "maxUploadMb": c.max_upload_mb,
-                "ai": self.app.ai_info(), "grammar": bool(c.grammar_url)}
+                "ai": self.app.ai_info(), "grammar": bool(c.grammar_url), "offline": c.offline}
         raw = (raw.replace("<!--BASE-->", f'<base href="{html.escape(c.base_path)}/">')
                   .replace("{{TITLE}}", html.escape(c.title))
                   .replace("{{BOOT}}", json.dumps(boot).replace("<", "\\u003c"))
@@ -757,6 +759,19 @@ class Handler(BaseHTTPRequestHandler):
         csp = (f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; frame-ancestors 'self'; object-src 'none'; "
                "base-uri 'self'; form-action 'self'")
         self.send(200, raw, ctype="text/html; charset=utf-8", cache="no-cache", headers={"Content-Security-Policy": csp})
+
+    def service_worker(self, path):
+        """Offline mode: the worker (rendered with this build's files) and its helpers. 404 when off, which also
+        makes browsers drop a worker installed before the option was turned off."""
+        c = self.app.c
+        if not c.offline:
+            return self.json(404, {"error": "offline mode is off (CARNET_OFFLINE)"})
+        if path == "/sw-lib.js":
+            body = offline.LIB.read_bytes()
+        else:
+            body = offline.render_sw(STATIC, __version__, c.base_path).encode()
+        self.send(200, body, ctype="text/javascript; charset=utf-8", cache="no-cache",
+                  headers={"Service-Worker-Allowed": f"{c.base_path}/"})
 
     def static(self, path):
         c = self.app.c
