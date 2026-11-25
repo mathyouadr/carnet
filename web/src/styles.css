@@ -824,3 +824,27 @@ html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inse
 
 @media (max-width: 760px) { .cn-chat.full { padding-bottom: calc(env(safe-area-inset-bottom) + var(--cn-bottom, 0px)); } }
 .cn-chat-fab { transform: translateY(-54px); }
+
+/* table of contents: a tab on the right edge, unfolding a panel (hidden while the chat is open) */
+.cn-toc-tab { position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 34; width: 26px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cn-line-2); border-right: 0; border-radius: 8px 0 0 8px; background: var(--cn-bg-2, var(--cn-bg)); color: var(--cn-fg-3); cursor: pointer; box-shadow: -2px 2px 8px rgba(0,0,0,.12); }
+.cn-toc-tab:hover { color: var(--cn-fg); width: 30px; }
+.cn-toc { position: fixed; right: 12px; top: calc(var(--cn-top) + 100px); width: 260px; max-height: calc(100dvh - var(--cn-top) - 132px - var(--cn-bottom)); z-index: 35; display: flex; flex-direction: column; background: var(--cn-bg-2, var(--cn-bg)); border: 1px solid var(--cn-line-2); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.22); overflow: hidden; animation: cn-slide .18s ease; }
+.cn-toc-top { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--cn-line); color: var(--cn-fg-2); font-size: 13px; font-weight: 600; }
+.cn-toc-list { overflow-y: auto; padding: 6px; display: flex; flex-direction: column; }
+.cn-toc-item { display: block; width: 100%; text-align: left; border: 0; border-left: 2px solid transparent; background: transparent; color: var(--cn-fg-2); font: inherit; font-size: 14px; line-height: 1.35; padding: 5px 8px; border-radius: 0 5px 5px 0; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cn-toc-item.l0 { color: var(--cn-fg); font-weight: 600; }
+.cn-toc-item.l2, .cn-toc-item.l3 { font-size: 13px; }
+.cn-toc-item.bold { font-style: italic; }
+.cn-toc-item:hover { background: var(--cn-hover); color: var(--cn-fg); }
+.cn-toc-item.on { border-left-color: var(--cn-accent); color: var(--cn-accent); background: var(--cn-active); }
+@keyframes cn-toc-flash { from { background: var(--cn-active); } to { background: transparent; } }
+.cn-toc-flash > .bn-block > .bn-block-content { animation: cn-toc-flash 1.6s ease; border-radius: 4px; }
+@media (min-width: 761px) { html.cn-toc-on .cn-main .cn-page:not(.peek) { padding-right: 284px; } }
+@media (max-width: 760px) {
+  .cn-toc-tab { top: 40%; }
+  .cn-toc-bg { position: fixed; inset: 0; z-index: 64; background: rgba(15,15,15,.3); }
+  .cn-toc { top: calc(var(--cn-top) + 12px); right: 0; bottom: calc(12px + var(--cn-bottom)); max-height: none; width: min(300px, 82vw); border-radius: 12px 0 0 12px; border-right: 0; z-index: 65; }
+  .cn-toc-item { padding-top: 10px; padding-bottom: 10px; font-size: 16px; }
+  .cn-toc-item.l2, .cn-toc-item.l3 { font-size: 15px; }
+}
+@media print { .cn-toc, .cn-toc-tab { display: none !important; } }

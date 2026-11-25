@@ -17,6 +17,7 @@ import { schema } from "./schema";
 import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { ChatPanel } from "./ai/ChatPanel";
+import { Outline } from "./Outline";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
 import { BlockMenu, BlocksMenu, SelectionMenu } from "./BlockMenu";
@@ -35,6 +36,7 @@ function AIToolbarButton({ onClick }: { onClick: () => void }) {
 
 type EditorProps = {
   page: Page; editable: boolean; onChange: (blocks: any[]) => void; focusOnLoad?: boolean; toolbarSlot?: string; strict?: boolean;
+  outline?: boolean;   // table of contents tab on the right (not in the side peek)
 };
 
 /** A page that cannot be loaded must never blank the whole app: retry in plain-text mode, then show a message. */
@@ -58,7 +60,7 @@ export function Editor(props: EditorProps) {
   return <EditorBoundary {...props} />;
 }
 
-function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, strict }: EditorProps) {
+function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, strict, outline }: EditorProps) {
   const app = useApp();
   const theme = useTheme();
   const host = useRef<HTMLDivElement>(null);
@@ -374,6 +376,7 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
       {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onClose={() => setMultiMenu(null)} />}
       {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
+      {outline && <Outline key={page.id} editor={editor} host={host} mobile={app.mobile} hidden={chat && aiAvailable} />}
       {chat && aiAvailable && <ChatPanel key={page.id} editor={editor} pageId={page.id} canInsert={editable} onClose={() => setChat(false)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>

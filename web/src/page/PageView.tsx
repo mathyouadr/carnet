@@ -230,7 +230,7 @@ export function PageView({ pageId, editable, peek }: { pageId: string; editable:
         ) : (
           <div data-page={page.id}>
             <Editor key={page.id + ":" + version} page={page} editable={editable}
-              focusOnLoad={!page.title && !page.content.length} toolbarSlot={peek ? "cn-tb-peek" : "cn-tb-main"}
+              focusOnLoad={!page.title && !page.content.length} toolbarSlot={peek ? "cn-tb-peek" : "cn-tb-main"} outline={!peek}
               onChange={(blocks) => queue({ content: blocks })} />
           </div>
         )}
