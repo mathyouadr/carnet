@@ -10,18 +10,30 @@ importScripts(BASE + "/sw-lib.js?v=" + VERSION);
 const L = self.CarnetOffline;
 const SHELL = "carnet-" + VERSION, DATA = "carnet-data", FILES = "carnet-files";
 const TIMEOUT = 4000, WARM_EVERY = 15 * 60 * 1000, FILE_MAX = 10 * 1024 * 1024, FILES_MAX = 100 * 1024 * 1024;
-const K = { boot: BASE + "/api/bootstrap", known: BASE + "/__known", index: BASE + "/__index", files: BASE + "/__files", warm: BASE + "/__warm" };
+const K = { shells: BASE + "/__shells", boot: BASE + "/api/bootstrap", known: BASE + "/__known", index: BASE + "/__index", files: BASE + "/__files", warm: BASE + "/__warm" };
 const pageKey = id => BASE + "/api/pages/" + id;
 let slowUntil = 0, warming = false;
 
+// A shell with a missing file would break offline: then the install fails and the previous worker stays.
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(SHELL).then(c => Promise.allSettled([BASE + "/", ...ASSETS.map(a => BASE + "/" + a)].map(u =>
-    fetch(u, { credentials: "same-origin" }).then(res => { if (res.ok) return c.put(u, res); }))))
-    .then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(SHELL);
+    const rs = await Promise.allSettled([BASE + "/", ...ASSETS.map(a => BASE + "/" + a)].map(u =>
+      fetch(u, { credentials: "same-origin" }).then(res => { if (!res.ok) throw new Error(u); return c.put(u, res); })));
+    if (rs.some(r => r.status === "rejected")) { await caches.delete(SHELL); throw new Error("incomplete shell"); }
+    await self.skipWaiting();
+  })());
 });
+// The previous shell is kept one more version: a tab still running the old bundle finds its lazy chunks there
+// (asset requests look in every cache) instead of a 404 from a server that no longer has them.
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("carnet-") && ![SHELL, DATA, FILES].includes(k))
-    .map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil((async () => {
+    const keep = ((await getJSON(DATA, K.shells)) || []).filter(s => s !== SHELL).slice(-1).concat([SHELL]);
+    await putJSON(DATA, K.shells, keep);
+    const ks = await caches.keys();
+    await Promise.all(ks.filter(k => k.startsWith("carnet-") && ![DATA, FILES, ...keep].includes(k)).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
 const stamp = res => { const h = new Headers(res.headers); h.set("X-Cached-At", String(Date.now()));
