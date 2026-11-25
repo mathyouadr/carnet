@@ -874,3 +874,6 @@ html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inse
 @media (min-width: 761px) { html:has(.cn-gram) .cn-main .cn-page:not(.peek) { padding-right: 356px; } }
 @media (max-width: 760px) { .cn-gram { left: 0; right: 0; top: 45%; bottom: var(--cn-bottom); z-index: 66; width: auto; max-width: none; border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom); } .cn-gram-fix { padding: 6px 12px; font-size: 15px; } }
 @media print { .cn-gram { display: none !important; } }
+
+/* a card dragged over another database: it will move there */
+.cn-db.drop-db { outline: 2px dashed var(--cn-accent); outline-offset: 4px; border-radius: 8px; background: var(--cn-accent-soft); }

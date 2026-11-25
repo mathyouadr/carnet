@@ -65,6 +65,27 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
   const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
   const rowSel = useRowSelect({ root: rootEl, dbId, inline, readOnly: !!readOnly, reload: load });
 
+  // a card dragged from another database and dropped here: the row changes database (Notion-like)
+  const [dropOver, setDropOver] = useState(false);
+  const acceptsRow = (e: React.DragEvent) => !readOnly && e.dataTransfer.types.includes("text/carnet-db") && !!db
+    && !e.dataTransfer.types.includes("text/carnet-from-" + dbId.toLowerCase());
+  const moveHere = async (rowId: string, from: string) => {
+    if (!rowId || !from || from === dbId) return;
+    try {
+      const before = await api.get(`/api/pages/${rowId}`);
+      await api.post(`/api/pages/${rowId}/move`, { parent_id: dbId });
+      await app.refresh(); announce(from); announce(dbId); load();
+      app.toast(`${t("Moved to")} « ${db?.title || t("Untitled")} » ✓`, {
+        label: t("Undo"),
+        run: async () => {
+          await api.post(`/api/pages/${rowId}/move`, { parent_id: from });
+          await api.post(`/api/pages/${rowId}`, { props: before.props || {}, merge_props: false });
+          await app.refresh(); announce(from); announce(dbId);
+        },
+      });
+    } catch (err: any) { app.toast(String(err.message || err)); }
+  };
+
   if (err) return <div className="cn-db-missing">{err}</div>;
   if (!db || !db.schema || !db.views) return <div className="cn-db-loading">{t("Loading…")}</div>;
   const schema = db.schema;
@@ -150,7 +171,11 @@ export function DatabaseView({ dbId, inline, readOnly, initial, lockView }: { db
 
   return (
     <RowSelCtx.Provider value={rowSel.ctx}>
-    <div ref={setRootEl} className={`cn-db ${inline ? "inline" : "full"}`}>
+    <div ref={setRootEl} className={`cn-db ${inline ? "inline" : "full"} ${dropOver ? "drop-db" : ""}`}
+      onDragStartCapture={(e) => { if ((e.target as HTMLElement).closest?.("[data-row]")) { e.dataTransfer.setData("text/carnet-db", dbId); e.dataTransfer.setData("text/carnet-from-" + dbId.toLowerCase(), "1"); } }}
+      onDragOver={(e) => { if (acceptsRow(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropOver(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropOver(false); }}
+      onDrop={(e) => { if (!acceptsRow(e)) return; e.preventDefault(); e.stopPropagation(); setDropOver(false); moveHere(e.dataTransfer.getData("text/carnet-row"), e.dataTransfer.getData("text/carnet-db")); }}>
       {inline && (
         <div className="cn-db-title">
           <span className="ic">{db.icon || "🗂️"}</span>

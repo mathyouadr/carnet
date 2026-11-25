@@ -47,7 +47,7 @@ const FR: Record<string, string> = {
   "Close": "Fermer", "Cancel": "Annuler", "OK": "OK", "Rename": "Renommer", "Open": "Ouvrir", "Open as page": "Ouvrir en pleine page",
   "Move here": "Déplacer ici", "Top level": "Racine", "Choose where to move": "Où déplacer la page ?",
   // editor & toolbar
-  "Undo": "Annuler", "Redo": "Rétablir", "Text": "Texte", "Heading 1": "Titre 1", "Heading 2": "Titre 2", "Heading 3": "Titre 3",
+  "Moved to": "Déplacé vers", "Undo": "Annuler", "Redo": "Rétablir", "Text": "Texte", "Heading 1": "Titre 1", "Heading 2": "Titre 2", "Heading 3": "Titre 3",
   "Bold": "Gras", "Italic": "Italique", "Underline": "Souligné", "Strikethrough": "Barré", "Inline code": "Code",
   "Text color": "Couleur du texte", "Highlight": "Surlignage", "Align left": "Aligner à gauche", "Center": "Centrer",
   "Align right": "Aligner à droite", "Justify": "Justifier", "Bulleted list": "Liste à puces", "Numbered list": "Liste numérotée",

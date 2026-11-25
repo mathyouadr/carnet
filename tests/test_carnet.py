@@ -21,6 +21,19 @@ class StoreTests(unittest.TestCase):
     def tearDown(self):
         self.s.close()
 
+    def test_row_moved_to_another_database_keeps_matching_props(self):
+        a = self.s.create({"title": "A", "kind": "database", "schema": {"properties": [
+            {"id": "m", "name": "Matière", "type": "select", "options": [{"id": "o1", "name": "SLAM", "color": "blue"}]},
+            {"id": "p", "name": "Prof", "type": "text"}]}})
+        b = self.s.create({"title": "B", "kind": "database", "schema": {"properties": [
+            {"id": "mm", "name": "matière", "type": "select", "options": []}]}})
+        r = self.s.create({"title": "R", "parent_id": a["id"], "props": {"Matière": "SLAM", "Prof": "X"}})
+        moved = self.s.move(r["id"], b["id"])
+        self.assertEqual(moved["parent_id"], b["id"])
+        opts = self.s.page(b["id"])["schema"]["properties"][0]["options"]
+        self.assertEqual([o["name"] for o in opts], ["SLAM"])
+        self.assertEqual(moved["props"], {"mm": opts[0]["id"]})
+
     def test_nesting_move_trash_restore(self):
         a = self.s.create({"title": "A"})
         b = self.s.create({"title": "B", "parent_id": a["id"]})

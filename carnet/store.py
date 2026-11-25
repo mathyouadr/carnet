@@ -439,7 +439,35 @@ class Store:
                 self.x("UPDATE pages SET position=? WHERE id=?", (i, sid))
             if parent_id != r["parent_id"]:
                 self.x("UPDATE pages SET parent_id=?, inline=0, updated_at=? WHERE id=?", (parent_id, now(), pid))
+                if parent is not None and parent["kind"] == "database" and r["parent_id"]:
+                    self._carry_props(r, parent)
         return self.page(pid)
+
+    def _carry_props(self, r, new_db):
+        """A row moved to another database keeps the values whose property exists there (same name and
+        type; select options are matched by name and created when missing). The others are dropped."""
+        old_db = self.q1("SELECT * FROM pages WHERE id=? AND kind='database'", (r["parent_id"],))
+        if old_db is None or old_db["id"] == new_db["id"]:
+            return
+        old_s, new_s = self.schema_of(old_db), self.schema_of(new_db)
+        mine = _loads(r["props"], {})
+        before = json.dumps(new_s, sort_keys=True)
+        out = {}
+        for op in old_s["properties"]:
+            if op["id"] not in mine:
+                continue
+            np_ = next((q for q in new_s["properties"] if q["name"].lower() == op["name"].lower() and q["type"] == op["type"]), None)
+            if not np_:
+                continue
+            v = mine[op["id"]]
+            if op["type"] in ("select", "status", "multi_select"):
+                names = {o["id"]: o["name"] for o in op.get("options", [])}
+                v = ([names[x] for x in v if x in names] if isinstance(v, list) else names.get(v))
+            out[np_["id"]] = self._clean_value(np_, v)
+        if json.dumps(new_s, sort_keys=True) != before:
+            self.x("UPDATE pages SET schema=?, updated_at=? WHERE id=?", (json.dumps(new_s), now(), new_db["id"]))
+        self.x("UPDATE pages SET props=? WHERE id=?",
+               (json.dumps({k: v for k, v in out.items() if v is not None}), r["id"]))
 
     def reorder_favorites(self, ids):
         if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
