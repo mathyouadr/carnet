@@ -6,7 +6,7 @@ import {
   Undo2, Redo2, Bold, Italic, Underline, Strikethrough, Code, Baseline, Highlighter, AlignLeft, AlignCenter,
   AlignRight, AlignJustify, List, ListOrdered, ListChecks, Link2, Image as ImageIcon, Table, SquareFunction,
   Sigma, IndentIncrease, IndentDecrease, RemoveFormatting, ChevronDown, Plus, Quote, Minus, MessageSquareQuote,
-  ListCollapse, ListTree, AppWindow, Columns2, FileCode2, Paperclip, Video, Sparkles, MessageCircle,
+  ListCollapse, ListTree, AppWindow, Columns2, FileCode2, Paperclip, Video, Sparkles, MessageCircle, SpellCheck,
 } from "lucide-react";
 import { Popover, MenuItem, MenuSep, COLORS } from "../ui/Popover";
 import { useApp } from "../app/store";
@@ -55,7 +55,7 @@ function useKeyboardInset() {
   return inset;
 }
 
-export function DocsToolbar({ editor, pageId, slot, onAI, onChat }: { editor: any; pageId: string; slot?: string; onAI?: () => void; onChat?: () => void }) {
+export function DocsToolbar({ editor, pageId, slot, onAI, onChat, onSpell }: { editor: any; pageId: string; slot?: string; onAI?: () => void; onChat?: () => void; onSpell?: () => void }) {
   const app = useApp();
   const [, force] = useReducer((x) => x + 1, 0);
   useEditorSelectionChange(force, editor);
@@ -128,6 +128,7 @@ export function DocsToolbar({ editor, pageId, slot, onAI, onChat }: { editor: an
         <B title="Redo" onClick={() => editor.redo()}><Redo2 size={16} /></B>
         {onAI && <B title={t("Ask AI")} onClick={onAI}><Sparkles size={16} className="cn-ai-spark" /></B>}
         {onChat && <B title="Chat" onClick={onChat}><MessageCircle size={16} className="cn-ai-spark" /></B>}
+        {onSpell && <B title="Check spelling and grammar" onClick={onSpell}><SpellCheck size={16} /></B>}
         <span className="cn-tb-sep" />
         <button type="button" className={`cn-tb-select ${pop?.k === "kind" ? "open" : ""}`} onMouseDown={(e) => e.preventDefault()} onClick={open("kind")}>
           <span>{t(kind.label)}</span><ChevronDown size={14} />

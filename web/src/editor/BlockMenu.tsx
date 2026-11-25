@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Bold, ChevronLeft, ChevronRight, ClipboardCopy, ClipboardPaste, Code, Copy, Italic, Repeat2, Scissors, Sparkles, Strikethrough, Trash2, Underline } from "lucide-react";
+import { ArrowDown, ArrowUp, Bold, ChevronLeft, ChevronRight, ClipboardCopy, ClipboardPaste, Code, Copy, Italic, Repeat2, Scissors, SpellCheck, Sparkles, Strikethrough, Trash2, Underline } from "lucide-react";
 import { useApp } from "../app/store";
 import { t } from "../i18n";
 import { MenuItem, MenuSep, Popover } from "../ui/Popover";
@@ -10,8 +10,8 @@ import type { useBlockSelect } from "./blockSelect";
 const stripIds = (b: any): any => ({ ...b, id: undefined, children: (b.children || []).map(stripIds) });
 
 /** Right-click menu of one block of the editor. Text selections keep the browser menu (copy, paste). */
-export function BlockMenu({ editor, blockId, at, onAI, onClose }: {
-  editor: any; blockId: string; at: DOMRect; onAI?: () => void; onClose: () => void;
+export function BlockMenu({ editor, blockId, at, onAI, onSpell, onClose }: {
+  editor: any; blockId: string; at: DOMRect; onAI?: () => void; onSpell?: (only?: string[]) => void; onClose: () => void;
 }) {
   const [turn, setTurn] = useState(false);
   const block = editor.getBlock(blockId);
@@ -31,6 +31,7 @@ export function BlockMenu({ editor, blockId, at, onAI, onClose }: {
         ))}
       </> : <>
         {onAI && inline && <MenuItem icon={<Sparkles size={15} />} onClick={run(() => { focus(); onAI(); })}>{t("Ask {name}").replace("{name}", aiName())}</MenuItem>}
+        {onSpell && <MenuItem icon={<SpellCheck size={15} />} onClick={run(() => onSpell())}>{t("Check spelling and grammar")}</MenuItem>}
         {inline && <MenuItem icon={<Repeat2 size={15} />} right={<ChevronRight size={14} />} onClick={() => setTurn(true)}>{t("Turn into")}</MenuItem>}
         <MenuItem icon={<Copy size={15} />} onClick={run(() => editor.insertBlocks([stripIds(block)], blockId, "after"))}>{t("Duplicate")}</MenuItem>
         <MenuItem icon={<ArrowUp size={15} />} onClick={run(() => { focus(); editor.moveBlocksUp(); })}>{t("Move up")}</MenuItem>
@@ -43,7 +44,7 @@ export function BlockMenu({ editor, blockId, at, onAI, onClose }: {
 }
 
 /** Right-click menu when text is selected: clipboard, formatting, AI, turn into. */
-export function SelectionMenu({ editor, at, onAI, onClose }: { editor: any; at: DOMRect; onAI?: () => void; onClose: () => void }) {
+export function SelectionMenu({ editor, at, onAI, onSpell, onClose }: { editor: any; at: DOMRect; onAI?: () => void; onSpell?: (only?: string[]) => void; onClose: () => void }) {
   const [turn, setTurn] = useState(false);
   const app = useApp();
   const run = (fn: () => void | Promise<void>) => async () => { onClose(); editor.focus(); try { await fn(); } catch { app.toast(t("Clipboard access refused: use Ctrl V")); } };
@@ -61,6 +62,7 @@ export function SelectionMenu({ editor, at, onAI, onClose }: { editor: any; at: 
         ))}
       </> : <>
         {onAI && <MenuItem icon={<Sparkles size={15} />} onClick={run(() => onAI())}>{t("Ask {name}").replace("{name}", aiName())}</MenuItem>}
+        {onSpell && <MenuItem icon={<SpellCheck size={15} />} onClick={() => { const ids = blocks().map((b) => b.id); onClose(); onSpell(ids); }}>{t("Check spelling and grammar")}</MenuItem>}
         {turnable && <MenuItem icon={<Repeat2 size={15} />} right={<ChevronRight size={14} />} onClick={() => setTurn(true)}>{t("Turn into")}</MenuItem>}
         <MenuSep />
         <MenuItem icon={<Scissors size={15} />} onClick={run(() => { document.execCommand("cut"); })}>{t("Cut")}</MenuItem>
@@ -81,8 +83,8 @@ export function SelectionMenu({ editor, at, onAI, onClose }: { editor: any; at: 
 }
 
 /** Right-click menu on several selected blocks (Notion block selection: marquee, Esc, Shift+arrows). */
-export function BlocksMenu({ editor, sel, at, onAI, onClose }: {
-  editor: any; sel: ReturnType<typeof useBlockSelect>; at: DOMRect; onAI?: () => void; onClose: () => void;
+export function BlocksMenu({ editor, sel, at, onAI, onSpell, onClose }: {
+  editor: any; sel: ReturnType<typeof useBlockSelect>; at: DOMRect; onAI?: () => void; onSpell?: (only?: string[]) => void; onClose: () => void;
 }) {
   const [turn, setTurn] = useState(false);
   const top: string[] = sel.current().top;
@@ -99,6 +101,7 @@ export function BlocksMenu({ editor, sel, at, onAI, onClose }: {
         ))}
       </> : <>
         {onAI && <MenuItem icon={<Sparkles size={15} />} onClick={run(() => { onAI(); })}>{t("Ask {name}").replace("{name}", aiName())}</MenuItem>}
+        {onSpell && <MenuItem icon={<SpellCheck size={15} />} onClick={run(() => onSpell(top))}>{t("Check spelling and grammar")}</MenuItem>}
         {turnable && <MenuItem icon={<Repeat2 size={15} />} right={<ChevronRight size={14} />} onClick={() => setTurn(true)}>{t("Turn into")}</MenuItem>}
         <MenuItem icon={<Copy size={15} />} onClick={run(() => a().duplicate())}>{t("Duplicate")}</MenuItem>
         <MenuItem icon={<ArrowUp size={15} />} onClick={run(() => a().move(true))}>{t("Move up")}</MenuItem>

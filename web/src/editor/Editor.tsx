@@ -18,6 +18,8 @@ import { sanitize } from "./sanitize";
 import { AIMenu, aiName } from "./ai/AIMenu";
 import { ChatPanel } from "./ai/ChatPanel";
 import { Outline } from "./Outline";
+import { GrammarMenu, GrammarPanel, segText, useGrammar } from "./Grammar";
+import type { GIssue } from "./Grammar";
 import { isSpaceInput } from "./ai/policy";
 import { DocsToolbar } from "./DocsToolbar";
 import { BlockMenu, BlocksMenu, SelectionMenu } from "./BlockMenu";
@@ -90,7 +92,14 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   const aiOn = aiAvailable && editable;
   const [ai, setAI] = useState<{ blockIds: string[]; hasSelection: boolean } | null>(null);
   const [chat, setChat] = useState(false);
-  useEffect(() => { setAI(null); setChat(false); }, [page.id]);               // a menu belongs to the page it was opened on
+  useEffect(() => { setAI(null); setChat(false); }, [page.id]);
+  // spelling and grammar (LanguageTool on the server, no AI): one side panel at a time, chat or checker
+  const gram = useGrammar(editor, host, !!BOOT.grammar && editable && !page.readonly && !page.in_trash);
+  const gramRef = useRef(gram);
+  gramRef.current = gram;
+  const [gramMenu, setGramMenu] = useState<{ issue: GIssue; at: DOMRect } | null>(null);
+  const spell = gram.enabled ? (only?: string[]) => { setChat(false); gram.check(only); } : undefined;
+  useEffect(() => { if (chat) gramRef.current.setOpen(false); }, [chat]);               // a menu belongs to the page it was opened on
   // scope "page": the whole page (toolbar button); "here": the block under the cursor (/ia); default: selection, else cursor
   const openAI = useCallback((scope?: "page" | "here") => {
     const sel = editor.getSelection();
@@ -171,6 +180,8 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
       const tg = e.target as HTMLElement;
       if (tg.closest?.("input, textarea:not(.cn-title), select, a[href], .cn-pop")) return;
       if (tg.closest?.("button") && tg.closest?.(".bn-editor")) return;
+      const gi = gramRef.current.enabled ? gramRef.current.issueAt(e.clientX, e.clientY) : null;
+      if (gi) { e.preventDefault(); setGramMenu({ issue: gi, at: new DOMRect(e.clientX, e.clientY, 0, 0) }); return; }
       const bs = bselRef.current;
       if (bs.active) {                                   // blocks are selected: one menu for all of them
         if (bs.hits(e.clientY)) { e.preventDefault(); setMultiMenu(new DOMRect(e.clientX, e.clientY, 0, 0)); return; }
@@ -341,7 +352,8 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
   return (
     <div ref={host} className={`cn-editor ${editable ? "edit" : "read"}`}>
       <BlockSelectLayer rects={bsel.rects} box={bsel.box} />
-      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? () => openAI("page") : undefined} onChat={aiAvailable ? () => setChat((c) => !c) : undefined} />}
+      {editable && <DocsToolbar editor={editor} pageId={page.id} slot={toolbarSlot} onAI={aiOn ? () => openAI("page") : undefined} onChat={aiAvailable ? () => setChat((c) => !c) : undefined}
+        onSpell={spell ? () => (gram.open ? gram.setOpen(false) : spell()) : undefined} />}
       <BlockNoteView editor={editor} editable={editable} theme={theme} onChange={() => onChange(editor.document as any[])}
         slashMenu={false} formattingToolbar={!app.mobile && !aiOn} sideMenu={editable && !app.mobile} emojiPicker>
         {aiOn && !app.mobile && (
@@ -373,10 +385,12 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         </button>
       )}
       {pageMenu && <PageMenu page={page} anchor={pageMenu} onClose={() => setPageMenu(null)} />}
-      {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onClose={() => setSelMenu(null)} />}
-      {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onClose={() => setMultiMenu(null)} />}
-      {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onClose={() => setBlockMenu(null)} />}
-      {outline && <Outline key={page.id} editor={editor} host={host} mobile={app.mobile} hidden={chat && aiAvailable} />}
+      {selMenu && <SelectionMenu editor={editor} at={selMenu} onAI={aiOn ? openAI : undefined} onSpell={spell} onClose={() => setSelMenu(null)} />}
+      {multiMenu && <BlocksMenu editor={editor} sel={bsel} at={multiMenu} onAI={aiOn ? openAI : undefined} onSpell={spell} onClose={() => setMultiMenu(null)} />}
+      {blockMenu && <BlockMenu editor={editor} blockId={blockMenu.id} at={blockMenu.at} onAI={aiOn ? openAI : undefined} onSpell={spell} onClose={() => setBlockMenu(null)} />}
+      {gramMenu && <GrammarMenu g={gram} issue={gramMenu.issue} at={gramMenu.at} onClose={() => setGramMenu(null)} />}
+      {gram.open && !chat && <GrammarPanel g={gram} readText={(i) => segText(host.current, i)} />}
+      {outline && <Outline key={page.id} editor={editor} host={host} mobile={app.mobile} hidden={(chat && aiAvailable) || gram.open} />}
       {chat && aiAvailable && <ChatPanel key={page.id} editor={editor} pageId={page.id} canInsert={editable} onClose={() => setChat(false)} />}
       {ai && <AIMenu key={page.id} editor={editor} pageId={page.id} blockIds={ai.blockIds} hasSelection={ai.hasSelection} onClose={() => setAI(null)} />}
     </div>

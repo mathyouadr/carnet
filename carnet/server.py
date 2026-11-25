@@ -22,7 +22,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, ai, transfer
+from . import __version__, ai, grammar, transfer
 from . import markdown as md
 from .api import API, dumps
 from .config import Config
@@ -91,7 +91,8 @@ class App:
 
     def info(self):
         return {"version": __version__, "title": self.c.title, "base": self.c.base_path, "protected": self.protected,
-                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb, "ai": self.ai_info()}
+                "lang": self.c.lang, "theme": self.c.theme, "max_upload_mb": self.c.max_upload_mb, "ai": self.ai_info(),
+                "grammar": bool(self.c.grammar_url)}
 
     def ai_info(self):
         return {"enabled": self.c.ai_enabled, "name": self.c.ai_name, "models": [l for l, _ in self.c.ai_model_list]}
@@ -408,6 +409,12 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/ai/chat":
                     return self.ai_chat()
                 return self.ai_stream() if path == "/api/ai" else self.ai_blocks()
+            if path == "/api/grammar":
+                if not self.app.c.grammar_url:
+                    return self.json(404, {"error": "not found"})
+                if method != "POST":
+                    return self.json(405, {"error": "method not allowed"})
+                return self.grammar_check()
             if path == "/api/files" and method == "POST":
                 return self.upload()
             if path == "/api/import" and method == "POST":
@@ -606,6 +613,25 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(413, {"error": "too_large"})
         return self.json(200, {"blocks": md.to_blocks(text, resolve=self.app.store.resolve_title)})
 
+    def grammar_check(self):
+        """Spelling and grammar of a text (LanguageTool): {text, language?} -> {matches: [...]}."""
+        body = self._ai_body()
+        if body is None:
+            return
+        text, lang = body.get("text"), body.get("language") or self.app.c.grammar_lang
+        if not isinstance(text, str) or not isinstance(lang, str):
+            return self.json(400, {"error": "text_expected"})
+        if len(text) > grammar.MAX_TEXT:
+            return self.json(413, {"error": "too_large"})
+        if lang not in grammar.LANGS and lang != self.app.c.grammar_lang:
+            return self.json(400, {"error": "language"})
+        try:
+            matches = grammar.check(self.app.c.grammar_url, text, lang)
+        except Exception as e:                              # server down, timeout, bad answer
+            log.warning("grammar check failed: %s", e)
+            return self.json(502, {"error": "grammar_unavailable"})
+        return self.json(200, {"matches": matches})
+
     # ------------------------------------------------------------------ uploads & files
     def upload(self):
         name = urllib.parse.unquote(self.headers.get("X-Filename") or "file")
@@ -703,7 +729,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = idx.read_text(encoding="utf-8")
         boot = {"base": c.base_path, "protected": self.app.protected, "loggedIn": logged_in, "version": __version__,
                 "title": c.title, "lang": c.lang, "theme": c.theme, "maxUploadMb": c.max_upload_mb,
-                "ai": self.app.ai_info()}
+                "ai": self.app.ai_info(), "grammar": bool(c.grammar_url)}
         raw = (raw.replace("<!--BASE-->", f'<base href="{html.escape(c.base_path)}/">')
                   .replace("{{TITLE}}", html.escape(c.title))
                   .replace("{{BOOT}}", json.dumps(boot).replace("<", "\\u003c"))

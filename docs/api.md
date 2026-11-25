@@ -115,3 +115,9 @@ characters around the selection (60 000 for whole-page commands), and up to 5 re
 Environment: `CARNET_AI_TIMEOUT` (seconds without data from the model, default 120), `CARNET_AI_DEADLINE` (total seconds
 for one answer, default 180), `CARNET_AI_MAX_CONCURRENT` (simultaneous answers, default 4).
 
+
+## Spelling and grammar
+
+Only when `CARNET_GRAMMAR_URL` is set (otherwise **404**); `/api/bootstrap` → `info.grammar = true`.
+
+- `POST /api/grammar` `{text, language?}` → `{matches: [{offset, length, message, short, replacements[], rule, type, category}]}`. Offsets are in `text` (UTF-16, as in JavaScript). `language` defaults to `CARNET_GRAMMAR_LANG` (`auto`). Text over 100 000 characters → **413**; LanguageTool unreachable → **502** `grammar_unavailable`.

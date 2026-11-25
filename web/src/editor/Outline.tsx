@@ -31,8 +31,8 @@ export function Outline({ editor, host, mobile, hidden }: { editor: any; host: R
   // desktop: the page moves left so the panel never covers the text
   useEffect(() => {
     const on = panel && !mobile;
-    document.documentElement.classList.toggle("cn-toc-on", on);
-    return () => document.documentElement.classList.remove("cn-toc-on");
+    document.documentElement.classList.toggle("cn-outline-on", on);
+    return () => document.documentElement.classList.remove("cn-outline-on");
   }, [panel, mobile]);
 
   const blockEl = (id: string) => host.current?.querySelector(`.bn-block-outer[data-id="${CSS.escape(id)}"]`) as HTMLElement | null;
@@ -59,7 +59,7 @@ export function Outline({ editor, host, mobile, hidden }: { editor: any; host: R
 
   // keep the highlighted entry visible in a long list
   useEffect(() => {
-    list.current?.querySelector(".cn-toc-item.on")?.scrollIntoView({ block: "nearest" });
+    list.current?.querySelector(".cn-outline-item.on")?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
   // Escape closes the panel (unless a menu is open)
@@ -76,32 +76,32 @@ export function Outline({ editor, host, mobile, hidden }: { editor: any; host: R
     if (!el || !area) return;
     const y = el.getBoundingClientRect().top - area.getBoundingClientRect().top + area.scrollTop - 24;
     area.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
-    el.classList.remove("cn-toc-flash");
+    el.classList.remove("cn-outline-flash");
     void el.offsetWidth;                                 // restart the animation
-    el.classList.add("cn-toc-flash");
-    window.setTimeout(() => el.classList.remove("cn-toc-flash"), 1600);
+    el.classList.add("cn-outline-flash");
+    window.setTimeout(() => el.classList.remove("cn-outline-flash"), 1600);
     if (mobile) setOpen(false);
   };
 
   if (!shown) return null;
   if (!panel)
     return (
-      <button type="button" className="cn-toc-tab" title={t("Table of contents")} aria-label={t("Table of contents")} onClick={() => setOpen(true)}>
+      <button type="button" className="cn-outline-tab" title={t("Table of contents")} aria-label={t("Table of contents")} onClick={() => setOpen(true)}>
         <TableOfContents size={16} />
       </button>
     );
   return (
     <>
-      {mobile && <div className="cn-toc-bg" onClick={() => setOpen(false)} />}
-      <nav className="cn-toc" aria-label={t("Table of contents")}>
-        <div className="cn-toc-top">
+      {mobile && <div className="cn-outline-bg" onClick={() => setOpen(false)} />}
+      <nav className="cn-outline" aria-label={t("Table of contents")}>
+        <div className="cn-outline-top">
           <TableOfContents size={15} /><span>{t("Table of contents")}</span>
           <span className="cn-chat-sp" />
           <button type="button" className="cn-chat-ic" title={t("Close")} aria-label={t("Close")} onClick={() => setOpen(false)}><X size={16} /></button>
         </div>
-        <div className="cn-toc-list" ref={list}>
+        <div className="cn-outline-list" ref={list}>
           {items.map((i, n) => (
-            <button key={i.id} type="button" className={`cn-toc-item l${i.level} ${i.kind}${n === active ? " on" : ""}`}
+            <button key={i.id} type="button" className={`cn-outline-item l${i.level} ${i.kind}${n === active ? " on" : ""}`}
               style={{ paddingLeft: 10 + i.level * 14 }} title={i.text} onClick={() => go(i.id)}>
               {i.text}
             </button>

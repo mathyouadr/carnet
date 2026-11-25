@@ -179,6 +179,7 @@ Environment variables (or a `.env` file next to where you start it):
 | `CARNET_AI_URL` | | OpenAI-compatible base URL (`…/v1`) for the AI assistant. Empty = no AI anywhere in the UI. |
 | `CARNET_AI_KEY` / `CARNET_AI_MODEL` | / `hermes-agent` | Bearer key (stays on the server) and model name sent to that endpoint. |
 | `CARNET_AI_NAME` / `CARNET_AI_SYSTEM` / `CARNET_AI_TIMEOUT` | `AI` / / `120` | Name shown in the UI, extra system prompt (`@/path` reads a file), seconds. |
+| `CARNET_GRAMMAR_URL` / `CARNET_GRAMMAR_LANG` | / `auto` | [LanguageTool](https://languagetool.org) server for the spelling and grammar checker (no AI). Empty = no checker. |
 | `CARNET_EXTRA_HEAD` / `CARNET_EXTRA_BODY` | | HTML injected in the page (`@/path/file.html` reads a file) — e.g. to re-theme Carnet with its CSS variables (`--cn-bg`, `--cn-fg`, `--cn-accent`…). `<script>` tags work (they get the page's CSP nonce); inline `onclick=` attributes don't. |
 
 ## ✨ AI assistant
@@ -198,6 +199,18 @@ CARNET_AI_URL=http://127.0.0.1:8642/v1 CARNET_AI_KEY=<API_SERVER_KEY> CARNET_AI_
 ```
 
 With Hermes Agent, give the API server no tools (`platform_toolsets: {api_server: [no_mcp]}`): it still answers with its memory in context, and nothing written in a note can make it act. Markdown-folder pages and the trash have no AI. API: [`docs/api.md`](docs/api.md#ai-assistant).
+
+## 🔤 Spelling and grammar
+
+Set `CARNET_GRAMMAR_URL` to a LanguageTool server and right-click in a page → *Check spelling and grammar* (whole page, or the selected blocks; on phones, the toolbar button). Mistakes are underlined, listed in a side panel, and a right-click on an underlined word offers the corrections, *Ignore* and *Add to dictionary* (kept in the browser). No AI, nothing is sent until you ask.
+
+```bash
+# self-hosted (Java 17+, ~600 MB of RAM): download LanguageTool-stable.zip, then
+java -Xmx768m -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081
+CARNET_GRAMMAR_URL=http://127.0.0.1:8081
+# or the public API (free, limited, your text leaves your server)
+CARNET_GRAMMAR_URL=https://api.languagetool.org
+```
 
 ## ⌨️ Shortcuts
 
