@@ -190,11 +190,22 @@ function Peek() {
         </div>
         <div id="cn-tb-peek" className="cn-tb-slot" />
         <div className="cn-peek-body">
-          <PageView key={app.peek} pageId={app.peek} editable={mode === "edit"} peek />
+          <PageView key={app.peek} pageId={app.peek} editable={mode === "edit" && !app.offline} peek />
         </div>
       </aside>
     </>
   );
+}
+
+/** "Offline · data from 14:32" (or 24/11 14:32 when not from today). */
+function OfflineBar({ at }: { at?: number }) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  let when = "";
+  if (at) {
+    const d = new Date(at), hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    when = d.toDateString() === new Date().toDateString() ? hm : `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${hm}`;
+  }
+  return <div className="cn-offline-bar" role="status">{t("Offline · reading only")}{when ? ` · ${t("data from")} ${when}` : ""}</div>;
 }
 
 function Toasts() {
@@ -216,7 +227,10 @@ function Main() {
   const [page, setPage] = useState<Page | null>(null);
   const [reload, setReload] = useState(0);
   const pid = app.pageId;
-  const { mode, set: setMode } = useModeFor(page ? { id: page.id, locked: !!page.options?.locked } : null, app.mobile);
+  const modeFor = useModeFor(page ? { id: page.id, locked: !!page.options?.locked } : null, app.mobile);
+  // offline: read-only everywhere (the chosen mode comes back with the network)
+  const mode = app.offline ? "read" : modeFor.mode;
+  const setMode = (m: "edit" | "read") => { if (app.offline && m === "edit") app.toast(t("Offline: reading only")); else modeFor.set(m); };
 
   // home: last page, else the first one, else a welcome page
   useEffect(() => {
@@ -272,6 +286,7 @@ function Main() {
       <main className="cn-main">
         {!app.mobile && <TabBar />}
         <Topbar mode={mode} setMode={setMode} page={page} onRestored={() => { setReload((x) => x + 1); window.dispatchEvent(new CustomEvent("carnet:changed", { detail: { id: pid } })); }} />
+        {app.offline && <OfflineBar at={app.offlineAt} />}
         <div id="cn-tb-main" className="cn-tb-slot" />
         <div className="cn-scroll">
           {pid ? <PageView key={pid} pageId={pid} editable={mode === "edit" && !page?.in_trash && !page?.readonly} /> : <div className="cn-page-loading" />}
@@ -282,7 +297,7 @@ function Main() {
           )}
         </div>
       </main>
-      {app.mobile && page && !page.readonly && !page.in_trash && mode === "read" && !app.peek && !app.sidebar && (
+      {app.mobile && page && !page.readonly && !page.in_trash && mode === "read" && !app.peek && !app.sidebar && !app.offline && (
         <button type="button" className="cn-edit-fab" aria-label={t("Modify")} title={t("Modify")} onClick={() => setMode("edit")}><Pencil size={22} /></button>
       )}
       <Peek />

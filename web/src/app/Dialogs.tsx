@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Table2, Search as SearchIcon, RotateCcw, Trash2, Upload, Download, Sun, Moon, Monitor, Clock, LogOut, Plus, LayoutTemplate, CornerDownLeft } from "lucide-react";
-import { api, BASE, BOOT, Summary } from "../api";
+import { api, BASE, BOOT, forgetOffline, Summary } from "../api";
 import { useApp } from "./store";
 import { fmtStamp, LANG, relTime, t } from "../i18n";
 import { MenuItem, Modal } from "../ui/Popover";
@@ -282,7 +282,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           <h3>{t("About")}</h3>
           <p className="cn-muted">Carnet {BOOT.version} — <a href="https://github.com/mathyouadr/carnet" target="_blank" rel="noreferrer">github.com/mathyouadr/carnet</a> · AGPL-3.0</p>
           <p className="cn-muted">{LANG === "fr" ? "Raccourcis" : "Shortcuts"} : Ctrl+K {t("Search").toLowerCase()} · Ctrl+Alt+N {t("New page").toLowerCase()} · Ctrl+Shift+L {t("Read").toLowerCase()}/{t("Edit").toLowerCase()} · / {LANG === "fr" ? "commandes" : "commands"} · @ {t("Mention a page").toLowerCase()}</p>
-          {BOOT.protected && <button type="button" className="cn-btn" onClick={async () => { await api.post("/api/logout"); location.reload(); }}><LogOut size={15} /> {t("Log out")}</button>}
+          {BOOT.protected && <button type="button" className="cn-btn" onClick={async () => { await api.post("/api/logout"); await forgetOffline(); location.reload(); }}><LogOut size={15} /> {t("Log out")}</button>}
         </section>
       </div>
     </Modal>

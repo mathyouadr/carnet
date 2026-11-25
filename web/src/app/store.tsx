@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { api, BASE, BOOT, Summary } from "../api";
+import { api, BASE, BOOT, getCacheState, onCacheState, Summary } from "../api";
+import type { CacheState } from "../api";
 import { t } from "../i18n";
 import * as T from "./tabsModel";
 import type { TabsState } from "./tabsModel";
@@ -41,6 +42,9 @@ type Ctx = {
   setGraphOpen: (v: boolean) => void;
   setSearchOpen: (v: boolean) => void;
   mobile: boolean;
+  /** no server (or data from the offline cache): read-only, see api.ts getCacheState */
+  offline: boolean;
+  offlineAt?: number;
   titleOf: (id: string) => string;
   // page tabs (desktop): see tabsModel.ts
   tabs: TabsState;
@@ -69,6 +73,33 @@ function useMobile() {
     return () => mq.removeEventListener("change", on);
   }, []);
   return m;
+}
+
+/** Offline mode (BOOT.offline, HTTPS or localhost): registers the service worker, asks it to download the pages
+ *  (it skips if done < 15 min ago), and tracks whether the server answers. <html> gets `cn-offline` while it does not. */
+function useOffline(): CacheState {
+  const [s, setS] = useState<CacheState>(getCacheState);
+  useEffect(() => onCacheState(setS), []);
+  useEffect(() => { document.documentElement.classList.toggle("cn-offline", s.offline); }, [s.offline]);
+  useEffect(() => {
+    if (!BOOT.offline || !("serviceWorker" in navigator) || !window.isSecureContext) return;
+    let stop = false;
+    const warm = () => navigator.serviceWorker.getRegistration(BASE + "/").then((r) => {
+      const w = r && (r.active || r.waiting || r.installing);
+      if (w && navigator.onLine) w.postMessage({ type: "warm" });
+    }).catch(() => undefined);
+    navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/" }).then(() => {
+      (navigator as any).storage?.persist?.().catch?.(() => undefined);
+      setTimeout(() => { if (!stop) warm(); }, 3000);
+    }).catch(() => undefined);
+    // back online: one GET clears the offline state (api.ts) and refreshes the pages copy
+    const retry = () => { if (!document.hidden && getCacheState().offline) api.get("/api/bootstrap").then(warm).catch(() => undefined); };
+    addEventListener("online", retry);
+    document.addEventListener("visibilitychange", retry);
+    const h = setInterval(retry, 30000);
+    return () => { stop = true; removeEventListener("online", retry); document.removeEventListener("visibilitychange", retry); clearInterval(h); };
+  }, []);
+  return s;
 }
 
 /** Phones: mark <html> with `cn-kb` while the on-screen keyboard is up (an editable has focus and the
@@ -129,6 +160,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const mobile = useMobile();
   useKeyboardFlag(mobile);
+  const cache = useOffline();
   const [sidebar, setSidebarState] = useState(() => !matchMedia("(max-width: 760px)").matches && localStorage.getItem("carnet:sidebar") !== "0");
   const [searchOpen, setSearchOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
@@ -272,6 +304,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createPage = useCallback(async (data: Record<string, any>, open = true) => {
+    if (getCacheState().offline) { toast(t("Offline: reading only")); return null; }
     const page = await api.post("/api/pages", data);
     await refresh();
     if (open) navigate(page.id);
@@ -279,6 +312,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh, navigate]);
 
   const trashPage = useCallback(async (id: string) => {
+    if (getCacheState().offline) { toast(t("Offline: reading only")); return; }
     try { await api.del(`/api/pages/${id}`); } catch (e: any) { toast(t("Your changes could not be saved: {msg}").replace("{msg}", String(e?.message))); return; }
     await refresh();
     toast(t("Move to trash") + " ✓", {
@@ -295,10 +329,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const titleOf = useCallback((id: string) => byId.get(id)?.title || t("Untitled"), [byId]);
 
+  // back online: the tree may have changed meanwhile
+  const wasOffline = useRef(cache.offline);
+  useEffect(() => {
+    if (wasOffline.current && !cache.offline) refresh().catch(() => undefined);
+    wasOffline.current = cache.offline;
+  }, [cache.offline, refresh]);
+
   const value: Ctx = {
     tree, byId, children: (id) => kids.get(id) || [], settings, refresh, patchTree, pageId: route.pageId, navigate,
     peek, setPeek, toast, toasts, createPage, trashPage, sidebar, setSidebar, searchOpen, setSearchOpen, graphOpen, setGraphOpen,
-    mobile, titleOf,
+    mobile, titleOf, offline: cache.offline, offlineAt: cache.at,
     tabs, openTab, switchTab, closeTab, closeOtherTabs, closeRightTabs, moveTab, open, linkProps,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

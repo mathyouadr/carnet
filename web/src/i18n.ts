@@ -1,5 +1,6 @@
 // Tiny i18n: English strings are the keys, French is a lookup table.
 const FR: Record<string, string> = {
+  "Offline: reading only": "Hors ligne : lecture seule", "Offline · reading only": "Hors ligne · lecture seule", "data from": "données de",
   "New page": "Nouvelle page", "Search": "Rechercher", "Graph view": "Vue graphique", "links": "liens", "Hierarchy": "Hiérarchie", "Graph": "Graphe", "Tree": "Arbre", "Hermes notes": "Notes d’Hermes", "Recenter": "Recentrer", "Could not load.": "Chargement impossible.", "Favorites": "Favoris", "Pages": "Pages",
   "Templates": "Modèles", "Trash": "Corbeille", "Settings": "Paramètres", "Untitled": "Sans titre",
   "Add a page": "Ajouter une page", "Add a sub-page": "Ajouter une sous-page", "No pages inside": "Aucune page à l'intérieur",

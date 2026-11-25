@@ -2,6 +2,7 @@
 export const BOOT: {
   base: string; protected: boolean; loggedIn: boolean; version: string; title: string; lang: string;
   theme: string; maxUploadMb: number; ai?: { enabled: boolean; name: string; models?: string[] }; grammar?: boolean;
+  offline?: boolean;
 } = (window as any).CARNET || { base: "", protected: false, loggedIn: true, version: "dev", title: "Carnet", lang: "", theme: "", maxUploadMb: 50 };
 
 export const BASE = BOOT.base || "";
@@ -14,6 +15,20 @@ export class ApiError extends Error {
     this.status = status;
     this.data = data;
   }
+}
+
+// Offline state: no answer from the server, or an answer the service worker took from its cache (X-Cached-At).
+// `at` = age of the cached data shown (oldest copy seen since going offline).
+export type CacheState = { offline: boolean; at?: number };
+let cacheState: CacheState = { offline: false };
+const cacheListeners = new Set<(s: CacheState) => void>();
+export function getCacheState(): CacheState { return cacheState; }
+export function onCacheState(fn: (s: CacheState) => void): () => void { cacheListeners.add(fn); return () => { cacheListeners.delete(fn); }; }
+function setCacheState(offline: boolean, at?: number) {
+  const next: CacheState = offline ? { offline, at: at && cacheState.at ? Math.min(at, cacheState.at) : at || cacheState.at } : { offline: false };
+  if (next.offline === cacheState.offline && next.at === cacheState.at) return;
+  cacheState = next;
+  cacheListeners.forEach((fn) => fn(next));
 }
 
 // Writes go out one at a time, in order: a new select option must reach the server before the row using it.
@@ -55,8 +70,12 @@ async function send<T = any>(method: string, path: string, body?: any): Promise<
         signal,
       });
     } catch (e: any) {
+      if (method === "GET") setCacheState(true);
       throw new ApiError(0, e?.message || "network error");     // status 0: no answer from the server
     }
+    const cachedAt = Number(res.headers.get("X-Cached-At") || 0);
+    if (cachedAt) setCacheState(true, cachedAt);
+    else if (res.status < 500) setCacheState(false);
     if (res.status === 204) return undefined as T;
     let data: any = null;
     try { data = await res.json(); } catch { /* empty */ }
@@ -105,6 +124,11 @@ export const api = {
     }).catch(() => undefined);
   },
 };
+
+/** Logout: drop the offline copy of the pages and files (the app shell stays, it holds no data). */
+export async function forgetOffline(): Promise<void> {
+  try { await Promise.all([caches.delete("carnet-data"), caches.delete("carnet-files")]); } catch { /* no Cache API */ }
+}
 
 /** Stored file URLs are "/files/<id>/<name>": make them absolute for the current base. */
 export function fileUrl(url: string): string {

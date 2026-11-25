@@ -897,3 +897,11 @@ html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inse
 .cn-ptab-add { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0 0 3px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--cn-fg-2); }
 .cn-ptab-add:hover { background: var(--cn-hover); color: var(--cn-fg); }
 @media print { .cn-ptabs { display: none !important; } }
+
+
+/* ---- offline (service worker, CARNET_OFFLINE): read-only, banner under the top bar ---- */
+.cn-offline-bar { margin: 0; padding: 6px 14px; font-size: 13px; font-weight: 600; text-align: center;
+  background: color-mix(in srgb, #f59f00 22%, var(--cn-bg)); color: var(--cn-fg);
+  border-bottom: 1px solid color-mix(in srgb, #f59f00 40%, transparent); }
+html.cn-offline .cn-ai-fab, html.cn-offline .cn-chat-fab, html.cn-offline .cn-edit-fab,
+html.cn-offline .cn-mode, html.cn-offline .cn-mode-toggle { display: none !important; }
