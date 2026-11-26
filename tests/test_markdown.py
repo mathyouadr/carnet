@@ -124,3 +124,18 @@ class MalformedBlocksTest(unittest.TestCase):
                     md.to_text(blocks)
                     md.to_markdown(blocks)
                     md.page_refs(blocks)
+
+
+class DiagramBlocksTest(unittest.TestCase):
+    SRC = "```mermaid\nflowchart TD\n  A --> B\n```\n\n```excalidraw\n{\"elements\":[{\"type\":\"text\",\"text\":\"nmap\"}]}\n```\n"
+
+    def test_fences_become_blocks_and_back(self):
+        blocks = md.to_blocks(self.SRC)
+        self.assertEqual([b["type"] for b in blocks], ["diagram", "whiteboard"])
+        self.assertEqual(blocks[0]["props"]["code"], "flowchart TD\n  A --> B")
+        self.assertEqual(md.to_markdown(blocks), self.SRC.strip() + "\n")
+
+    def test_search_text_includes_diagram_and_whiteboard_words(self):
+        text = md.to_text(md.to_blocks(self.SRC))
+        self.assertIn("A --> B", text)
+        self.assertIn("nmap", text)

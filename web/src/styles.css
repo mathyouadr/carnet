@@ -905,3 +905,21 @@ html.pwa .cn-chat.full .cn-chat-top { padding-top: calc(8px + env(safe-area-inse
   border-bottom: 1px solid color-mix(in srgb, #f59f00 40%, transparent); }
 html.cn-offline .cn-ai-fab, html.cn-offline .cn-chat-fab, html.cn-offline .cn-edit-fab,
 html.cn-offline .cn-mode, html.cn-offline .cn-mode-toggle { display: none !important; }
+
+/* diagrams (Mermaid) and whiteboards (Excalidraw) */
+.cn-diagram { width: 100%; padding: 8px 4px; border-radius: 6px; overflow-x: auto; cursor: pointer; min-height: 56px; display: flex; justify-content: center; align-items: center; }
+.cn-diagram:hover, .cn-diagram.editing { background: var(--cn-hover); }
+.cn-diagram-svg { max-width: 100%; } .cn-diagram-svg svg { max-width: 100%; height: auto; }
+.cn-diagram-edit { padding: 10px; }
+.cn-diagram-edit textarea { width: 100%; font-family: var(--cn-mono); font-size: 13px; border: 1px solid var(--cn-line-2); border-radius: 6px; background: var(--cn-bg-2); padding: 8px; outline: none; resize: vertical; }
+.cn-diagram-edit textarea:focus { border-color: var(--cn-accent); }
+.cn-diagram-edit-foot { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 6px; }
+.cn-diagram-edit-foot > span { margin-right: auto; }
+.cn-wb { width: 100%; min-height: 80px; border: 1px solid var(--cn-line); border-radius: 8px; padding: 6px; cursor: pointer; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+.cn-wb:hover { background: var(--cn-hover); }
+.cn-wb-svg { width: 100%; max-height: 520px; } .cn-wb-svg svg { max-height: 520px; }
+.cn-wb-full { position: fixed; inset: 0; z-index: 1200; background: var(--cn-bg); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+.cn-wb-bar { height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--cn-line); font-size: 14px; }
+.cn-wb-canvas { flex: 1; min-height: 0; position: relative; }
+.cn-wb-canvas .excalidraw { height: 100%; }
+html.cn-wb-open #tabbar { display: none; }

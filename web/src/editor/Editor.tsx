@@ -9,7 +9,7 @@ import {
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { getMultiColumnSlashMenuItems, multiColumnDropCursor, locales as mcLocales } from "@blocknote/xl-multi-column";
 import { syntaxHighlighter } from "@blocknote/code-block";
-import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Plus, Sparkles, MessageCircle } from "lucide-react";
+import { Sigma, SquareFunction, MessageSquareQuote, FileText, Table2, Database, Link2, ListTree, AppWindow, Workflow, PenTool, Plus, Sparkles, MessageCircle } from "lucide-react";
 import { api, BOOT, fileUrl, Page } from "../api";
 import { useApp } from "../app/store";
 import { LANG, t } from "../i18n";
@@ -307,6 +307,16 @@ function EditorInner({ page, editable, onChange, focusOnLoad, toolbarSlot, stric
         title: t("Table of contents"), group: t("Advanced"), aliases: ["toc", "sommaire", "table des matieres", "contents"],
         icon: <ListTree size={18} />,
         onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: "toc" } as any),
+      },
+      {
+        title: t("Diagram"), group: t("Advanced"), aliases: ["diagram", "diagramme", "schema", "schéma", "mermaid", "flowchart", "organigramme", "roadmap"],
+        icon: <Workflow size={18} />,
+        onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: "diagram" } as any),
+      },
+      {
+        title: t("Whiteboard"), group: t("Advanced"), aliases: ["whiteboard", "tableau blanc", "excalidraw", "dessin", "draw", "schema", "schéma"],
+        icon: <PenTool size={18} />,
+        onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: "whiteboard" } as any),
       },
       {
         title: t("Embed"), group: t("Media"), aliases: ["embed", "iframe", "youtube", "integration", "intégration", "maps", "pdf"],

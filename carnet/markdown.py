@@ -11,6 +11,8 @@ Custom blocks shared with the web app (``web/src/editor/schema.tsx``):
 * ``pageLink`` props ``pageId``                     (a sub-page)
 * ``database`` props ``pageId``                     (an inline database)
 * ``embed``    props ``url``
+* ``diagram``  props ``code``                       (a ``mermaid`` fence, drawn as a diagram)
+* ``whiteboard`` props ``data``                     (an ``excalidraw`` fence: Excalidraw scene as JSON)
 * inline ``pageMention`` props ``pageId``, ``title`` (``[[Title]]``)
 * inline ``inlineMath``  props ``latex``             (``$ ... $``)
 """
@@ -257,7 +259,7 @@ def _block(type_, content=None, props=None, children=None):
 
 
 NO_DEFAULT_PROPS = {"image", "file", "video", "audio", "math", "pageLink", "database", "embed", "divider", "codeBlock",
-                    "table"}
+                    "table", "diagram", "whiteboard"}
 
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*([\w+#.-]*)")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$")
@@ -349,7 +351,9 @@ def _parse_blocks_at(lines, resolve, resolve_file) -> list:
             if lang in ("math", "latex", "tex", "katex"):
                 out.append(_block("math", None, {"latex": code}))
             elif lang == "mermaid":
-                out.append(_block("codeBlock", [{"type": "text", "text": code, "styles": {}}], {"language": "mermaid"}))
+                out.append(_block("diagram", None, {"code": code}))
+            elif lang == "excalidraw":
+                out.append(_block("whiteboard", None, {"data": code.strip()}))
             else:
                 out.append(_block("codeBlock", [{"type": "text", "text": code, "styles": {}}] if code else [],
                                   {"language": _lang(lang)}))
@@ -748,6 +752,10 @@ def _block_md(b, depth, num, title_of, url_of):
         lang = {"shellscript": "bash"}.get(p.get("language") or "", p.get("language") or "")
         fence = "````" if "```" in code else "```"
         return f"{fence}{'' if lang == 'text' else lang}\n{code}\n{fence}"
+    if t in ("diagram", "whiteboard"):
+        code = str(p.get("code" if t == "diagram" else "data") or "")
+        fence = "`" * max(3, max((len(r) for r in re.findall(r"`+", code)), default=0) + 1)
+        return f"{fence}{'mermaid' if t == 'diagram' else 'excalidraw'}\n{code}\n{fence}"
     if t == "math":
         return "$$\n" + (p.get("latex") or "") + "\n$$"
     if t == "divider":
@@ -882,12 +890,26 @@ def to_text(blocks) -> str:
                                           for cell in (cells if isinstance(cells, list) else [])))
             if b.get("type") == "math" and p.get("latex"):
                 out.append(str(p["latex"]))
+            if b.get("type") == "diagram" and p.get("code"):
+                out.append(str(p["code"]))
+            if b.get("type") == "whiteboard" and p.get("data"):
+                out.extend(_scene_texts(p["data"]))
             if b.get("type") in ("image", "file", "video", "audio") and (p.get("caption") or p.get("name")):
                 out.append(str(p.get("caption") or p.get("name")))
             walk(b.get("children") if isinstance(b.get("children"), list) else None)
 
     walk(blocks)
     return "\n".join(out).strip()
+
+
+def _scene_texts(data) -> list[str]:
+    """Texts written on an Excalidraw scene (stored as JSON), so search finds them."""
+    try:
+        import json
+        els = json.loads(data).get("elements", [])
+        return [str(e["text"]) for e in els if isinstance(e, dict) and e.get("text") and not e.get("isDeleted")]
+    except Exception:
+        return []
 
 
 def page_refs(blocks, mentions_only=False) -> set[str]:

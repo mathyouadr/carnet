@@ -47,6 +47,8 @@ export function blocksPreview(blocks: any, o: PreviewOpts): string {
       }
       case "codeBlock": return `<pre>${c}</pre>`;
       case "math": return o.tex(String(b.props?.latex || ""), true).html;
+      case "diagram": return `<pre>${esc(String(b.props?.code || ""))}</pre>`;
+      case "whiteboard": return b.props?.data ? `<p><em>✎ Whiteboard</em></p>` : "";
       case "divider": return "<hr>";
       case "image": {
         const url = String(b.props?.url || "");

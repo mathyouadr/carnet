@@ -43,3 +43,16 @@ test("safeEmbed accepts web pages and uploaded files only", () => {
   assert.equal(safeEmbed("data:text/html,hi"), false);
   assert.equal(safeEmbed("/notes/p/abc"), false);
 });
+
+test("history preview: diagram source is escaped, whiteboard shows a marker only", () => {
+  const o = { base: "", tex: () => ({ html: "", error: "" }) };
+  const html = blocksPreview([
+    { type: "diagram", props: { code: "A[\"<img src=x onerror=alert(1)>\"]" }, children: [] },
+    { type: "whiteboard", props: { data: "{\"elements\":[{\"text\":\"<script>\"}]}" }, children: [] },
+    { type: "whiteboard", props: { data: "" }, children: [] },
+  ], o);
+  assert.ok(!html.includes("<img"));
+  assert.ok(!html.includes("<script"));
+  assert.ok(html.includes("&lt;img"));
+  assert.ok(html.includes("Whiteboard"));
+});

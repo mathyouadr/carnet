@@ -57,6 +57,7 @@ const FR: Record<string, string> = {
   "Table": "Tableau", "Image": "Image", "File": "Fichier", "Video": "Vidéo", "Embed": "Intégration",
   "Indent": "Augmenter le retrait", "Outdent": "Diminuer le retrait", "Insert": "Insérer", "More": "Plus",
   "Clear formatting": "Effacer la mise en forme", "Page": "Page", "Sub-page": "Sous-page", "Link to page": "Lien vers une page",
+  "Diagram": "Diagramme", "Whiteboard": "Tableau blanc", "Mermaid source": "Code Mermaid", "Example": "Exemple", "Empty diagram": "Diagramme vide", "Empty whiteboard": "Tableau blanc vide", "Click to draw": "Clique pour dessiner", "Whiteboard · saved automatically": "Tableau blanc · enregistré automatiquement",
   "Table of contents": "Table des matières", "Database": "Base de données", "Database - inline": "Base de données intégrée",
   "Columns": "Colonnes", "2 columns": "2 colonnes", "3 columns": "3 colonnes", "Mention a page": "Mentionner une page",
   "Type a LaTeX formula": "Tapez une formule LaTeX", "Empty formula": "Formule vide", "Click to edit": "Cliquer pour modifier",

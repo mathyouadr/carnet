@@ -7,6 +7,7 @@ import {
   AlignRight, AlignJustify, List, ListOrdered, ListChecks, Link2, Image as ImageIcon, Table, SquareFunction,
   Sigma, IndentIncrease, IndentDecrease, RemoveFormatting, ChevronDown, Plus, Quote, Minus, MessageSquareQuote,
   ListCollapse, ListTree, AppWindow, Columns2, FileCode2, Paperclip, Video, Sparkles, MessageCircle, SpellCheck,
+  Workflow, PenTool,
 } from "lucide-react";
 import { Popover, MenuItem, MenuSep, COLORS } from "../ui/Popover";
 import { useApp } from "../app/store";
@@ -36,7 +37,7 @@ export function kindOf(block: any): Kind {
   if (!block) return KINDS[0];
   if (block.type === "heading") return KINDS.find((k) => k.props?.level === block.props.level) || KINDS[1];
   const OTHER: Record<string, string> = { database: "Database", pageLink: "Page", image: "Image", file: "File", video: "Video",
-    audio: "Audio", table: "Table", math: "Equation", embed: "Embed", divider: "Divider", column: "Columns", columnList: "Columns" };
+    audio: "Audio", table: "Table", math: "Equation", diagram: "Diagram", whiteboard: "Whiteboard", embed: "Embed", divider: "Divider", column: "Columns", columnList: "Columns" };
   return KINDS.find((k) => k.type === block.type) || { key: block.type, label: OTHER[block.type] || "Block", type: block.type, icon: null };
 }
 
@@ -215,6 +216,8 @@ export function DocsToolbar({ editor, pageId, slot, onAI, onChat, onSpell }: { e
           <MenuItem icon={<Quote size={16} />} onClick={() => insert({ type: "quote", content: [] })}>{t("Quote")}</MenuItem>
           <MenuItem icon={<ListCollapse size={16} />} onClick={() => insert({ type: "toggleListItem", content: [] })}>{t("Toggle list")}</MenuItem>
           <MenuItem icon={<Minus size={16} />} onClick={() => insert({ type: "divider" })}>{t("Divider")}</MenuItem>
+          <MenuItem icon={<Workflow size={16} />} onClick={() => insert({ type: "diagram" })}>{t("Diagram")}</MenuItem>
+          <MenuItem icon={<PenTool size={16} />} onClick={() => insert({ type: "whiteboard" })}>{t("Whiteboard")}</MenuItem>
           <MenuItem icon={<ListTree size={16} />} onClick={() => insert({ type: "toc" })}>{t("Table of contents")}</MenuItem>
           <MenuItem icon={<Columns2 size={16} />} onClick={() => insert({
             type: "columnList", children: [
